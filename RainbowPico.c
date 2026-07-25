@@ -20,15 +20,6 @@ void init_led_pin(uint pin) {
     gpio_put(pin, false);
 }
 
-void detect_noise_on_pulled_up_pin(uint pin) {
-    if (gpio_get(pin) == 0) { // detect a low signal on the pin
-        sleep_ms(10);
-        if (gpio_get(pin) != 0) { // if it returns to high within the debounce period, it was likely noise
-            printf("Noise detected on pin %d\n", pin);
-        }
-    }
-}
-
 bool poll_button_click(uint pin) {
     bool reading = gpio_get(pin);
     if (reading == 0) {
@@ -73,8 +64,6 @@ int main()
 
     // Main loop
     while (true) {
-        detect_noise_on_pulled_up_pin(ON_OFF_BUTTON_PIN);
-        detect_noise_on_pulled_up_pin(COLOUR_BUTTON_PIN);
         if (poll_button_click(ON_OFF_BUTTON_PIN)) {
             led_on_off = !led_on_off; // Toggle LED on/off state
             printf("LED On/Off button clicked. New state: %s\n", led_on_off ? "ON" : "OFF");
