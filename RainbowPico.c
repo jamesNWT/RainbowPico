@@ -13,6 +13,9 @@ const uint COLOUR_BUTTON_PIN = 1;
 const bool HIGH = true;
 const bool LOW = false;
 
+// Define the colours we support in the LED
+typedef enum { RED, GREEN, BLUE } Colours;
+
 void init_button_pin(uint pin) {
     gpio_init(pin);
     gpio_set_dir(pin, GPIO_IN);
@@ -40,9 +43,23 @@ bool poll_button_click(uint pin) {
     return LOW;
 }
 
-void increment_colour_index(int *current_colour_index, const int *colours, int num_colours) {
-    *current_colour_index = (*current_colour_index + 1) % num_colours;
-    printf("Colour changed to index: %d\n", *current_colour_index);
+char* colour_to_string(Colours colour) {
+    switch (colour) {
+        case RED:
+            return "Red";
+        case GREEN:
+            return "Green";
+        case BLUE:
+            return "Blue";
+        default:
+            return "Unknown";
+    }
+}
+
+int next_colour(int *current_colour, Colours colours, int num_colours) {
+    *current_colour = (*current_colour + 1) % num_colours;
+    printf("Colour changed to: %s\n", colour_to_string(*current_colour));
+    return *current_colour;
 }
 
 void update_light_state(bool led_on, int current_colour_index) {
@@ -96,8 +113,7 @@ int main()
     // Initialize state variables
     bool led_on = LOW;
 
-    const int colours[] = {0, 1, 2}; // Example colour states
-    int current_colour_index = 0;
+    int current_colour = RED;
 
     // Main loop
     while (HIGH) {
@@ -107,10 +123,10 @@ int main()
             printf("LED On/Off button clicked. New state: %s\n", led_on ? "ON" : "OFF");
         }
         if (poll_button_click(COLOUR_BUTTON_PIN)) {
-            increment_colour_index(&current_colour_index, colours, sizeof(colours) / sizeof(colours[0]));
+            current_colour = next_colour(&current_colour, current_colour, 3); // Cycle through colours
         }
 
         // update components state based on program state
-        update_light_state(led_on, current_colour_index);
+        update_light_state(led_on, current_colour);
     }
 }
