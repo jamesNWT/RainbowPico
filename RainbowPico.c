@@ -29,6 +29,28 @@ void init_led_pin(uint pin, bool initial_state) {
     gpio_put(pin, initial_state);
 }
 
+void init_led_pin_pwm(uint pin) {
+
+    // Get the channel and slice for the pin. We could set manually by looking up the pin in the datasheet, but this is more flexible.
+    uint slice_num = pwm_gpio_to_slice_num(pin);
+    uint channel = pwm_gpio_to_channel(pin);
+
+    gpio_set_function(pin, GPIO_FUNC_PWM);
+
+    pwm_config config = pwm_get_default_config();
+    pwm_config_set_wrap(&config, 255); // Set wrap value for 8-bit resolution
+    pwm_config_set_clkdiv(&config, 97.6875f); // Set clock divider to slow pwm frequency to ~5kHz (125MHz / 256 / 97.6875 = ~5kHz)
+    
+    /*
+     * Invert output to match active-low LED configuration. we can naively set both channels A and B to inverted since any pin using 
+     * PWM on this machine is connected to an active-low LED. 
+    */ 
+    pwm_config_set_output_polarity(&config, true, true);
+    
+    pwm_init(slice_num, &config, true);
+    pwm_set_chan_level(slice_num, channel, 0); // Start with LED off
+}
+
 bool poll_button_click(uint pin) {
     bool reading = gpio_get(pin);
     if (reading == 0) {
