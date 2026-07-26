@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include "pico/stdlib.h"
+#include "hardware/pwm.h"
 
 // define device's physical configuration
 const uint RED_LED_PIN = 13;
