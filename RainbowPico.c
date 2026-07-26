@@ -1,12 +1,12 @@
 #include <stdio.h>
 #include "pico/stdlib.h"
 
-const uint RED_LED_PIN = 15;
-const uint GREEN_LED_PIN = 16;
-const uint BLUE_LED_PIN = 17;
+const uint RED_LED_PIN = 13;
+const uint GREEN_LED_PIN = 14;
+const uint BLUE_LED_PIN = 15;
 
-const uint ON_OFF_BUTTON_PIN = 14;
-const uint COLOUR_BUTTON_PIN = 13;
+const uint ON_OFF_BUTTON_PIN = 0;
+const uint COLOUR_BUTTON_PIN = 1;
 
 void init_button_pin(uint pin) {
     gpio_init(pin);
@@ -17,7 +17,7 @@ void init_button_pin(uint pin) {
 void init_led_pin(uint pin) {
     gpio_init(pin);
     gpio_set_dir(pin, GPIO_OUT);
-    gpio_put(pin, false);
+    gpio_put(pin, true);
 }
 
 bool poll_button_click(uint pin) {
@@ -40,6 +40,35 @@ void increment_colour_index(int *current_colour_index, const int *colours, int n
     printf("Colour changed to index: %d\n", *current_colour_index);
 }
 
+void update_light_state(bool led_on, int current_colour_index) {
+    if (led_on) {
+        switch (current_colour_index) {
+            case 0: // Red
+                gpio_put(RED_LED_PIN, false);
+                gpio_put(GREEN_LED_PIN, true);
+                gpio_put(BLUE_LED_PIN, true);
+                break;
+            case 1: // Green
+                gpio_put(RED_LED_PIN, true);
+                gpio_put(GREEN_LED_PIN, false);
+                gpio_put(BLUE_LED_PIN, true);
+                break;
+            case 2: // Blue
+                gpio_put(RED_LED_PIN, true);
+                gpio_put(GREEN_LED_PIN, true);
+                gpio_put(BLUE_LED_PIN, false);
+                break;
+            default:
+                break;
+        }
+    } else {
+        // Turn off all LEDs
+        gpio_put(RED_LED_PIN, true);
+        gpio_put(GREEN_LED_PIN, true);
+        gpio_put(BLUE_LED_PIN, true);
+    }
+}
+
 int main()
 {
     stdio_init_all();
@@ -57,20 +86,22 @@ int main()
     init_led_pin(BLUE_LED_PIN);
 
     // Initialize state variables
-    bool led_on_off = false;
-    bool last_stable_on_off = false;
-    const int colours[] = {1, 2, 3}; // Example colour states
+    bool led_on = false;
+
+    const int colours[] = {0, 1, 2}; // Example colour states
     int current_colour_index = 0;
 
     // Main loop
     while (true) {
         if (poll_button_click(ON_OFF_BUTTON_PIN)) {
-            led_on_off = !led_on_off; // Toggle LED on/off state
-            printf("LED On/Off button clicked. New state: %s\n", led_on_off ? "ON" : "OFF");
+            led_on = !led_on; // Toggle LED on/off state
+            printf("LED On/Off button clicked. New state: %s\n", led_on ? "ON" : "OFF");
         }
         if (poll_button_click(COLOUR_BUTTON_PIN)) {
             increment_colour_index(&current_colour_index, colours, sizeof(colours) / sizeof(colours[0]));
         }
+
+        update_light_state(led_on, current_colour_index);
     }
 }
 
