@@ -15,7 +15,7 @@ const bool HIGH = true;
 const bool LOW = false;
 
 // Define the colours we support in the LED
-typedef enum { RED, GREEN, BLUE } Colours;
+typedef enum { RED, ORANGE, YELLOW, GREEN, BLUE, INDIGO, VIOLET } Colours;
 
 void init_button_pin(uint pin) {
     gpio_init(pin);
@@ -81,13 +81,21 @@ bool poll_button_click(uint pin) {
 char* colour_to_string(Colours colour) {
     switch (colour) {
         case RED:
-            return "Red";
+            return "RED";
+        case ORANGE:
+            return "ORANGE";
+        case YELLOW:
+            return "YELLOW";
         case GREEN:
-            return "Green";
+            return "GREEN";
         case BLUE:
-            return "Blue";
+            return "BLUE";
+        case INDIGO:
+            return "INDIGO";
+        case VIOLET:
+            return "VIOLET";
         default:
-            return "Unknown";
+            return "UNKNOWN";
     }
 }
 
@@ -97,35 +105,42 @@ int next_colour(int *current_colour, Colours colours, int num_colours) {
     return *current_colour;
 }
 
-void update_light_state(bool led_on, int current_colour_index) {
+void set_led_rgb(uint8_t red, uint8_t green, uint8_t blue) {
+    set_led_brightness(RED_LED_PIN, red);
+    set_led_brightness(GREEN_LED_PIN, green);
+    set_led_brightness(BLUE_LED_PIN, blue);
+}
+
+void update_light_state(bool led_on, Colours colour) {
     if (led_on) {
-        switch (current_colour_index) {
-            case 0: // Red
-                gpio_put(RED_LED_PIN, LOW);
-
-                gpio_put(GREEN_LED_PIN, HIGH);
-                gpio_put(BLUE_LED_PIN, HIGH);
+        switch (colour) {
+            case RED:
+                set_led_rgb(255, 0, 0);
                 break;
-            case 1: // Green
-                gpio_put(GREEN_LED_PIN, LOW);
-
-                gpio_put(RED_LED_PIN, HIGH);
-                gpio_put(BLUE_LED_PIN, HIGH);
+            case ORANGE:
+                set_led_rgb(255, 40, 0);
                 break;
-            case 2: // Blue
-                gpio_put(BLUE_LED_PIN, LOW);
-
-                gpio_put(RED_LED_PIN, HIGH);
-                gpio_put(GREEN_LED_PIN, HIGH);
+            case YELLOW:
+                set_led_rgb(255, 100, 0);
+                break;
+            case GREEN:
+                set_led_rgb(0, 255, 0);
+                break;
+            case BLUE:
+                set_led_rgb(0, 0, 255);
+                break;
+            case INDIGO:
+                set_led_rgb(75, 0, 130);
+                break;
+            case VIOLET:
+                set_led_rgb(148, 0, 211);
                 break;
             default:
                 break;
         }
     } else {
         // Turn off all LEDs
-        gpio_put(RED_LED_PIN, HIGH);
-        gpio_put(GREEN_LED_PIN, HIGH);
-        gpio_put(BLUE_LED_PIN, HIGH);
+        set_led_rgb(0, 0, 0);
     }
 }
 
@@ -141,9 +156,13 @@ int main()
     // Initialize components
     init_button_pin(ON_OFF_BUTTON_PIN);
     init_button_pin(COLOUR_BUTTON_PIN);
-    init_led_pin(RED_LED_PIN, HIGH);
-    init_led_pin(GREEN_LED_PIN, HIGH);
-    init_led_pin(BLUE_LED_PIN, HIGH);
+    
+    init_pwm_slice(pwm_gpio_to_slice_num(RED_LED_PIN));
+    init_pwm_slice(pwm_gpio_to_slice_num(GREEN_LED_PIN)); // Green and blue both use slice 7, so we only need to initialize it once.
+
+    init_led_pin_pwm(RED_LED_PIN);
+    init_led_pin_pwm(GREEN_LED_PIN);
+    init_led_pin_pwm(BLUE_LED_PIN);
 
     // Initialize state variables
     bool led_on = LOW;
@@ -158,7 +177,7 @@ int main()
             printf("LED On/Off button clicked. New state: %s\n", led_on ? "ON" : "OFF");
         }
         if (poll_button_click(COLOUR_BUTTON_PIN)) {
-            current_colour = next_colour(&current_colour, current_colour, 3); // Cycle through colours
+            current_colour = next_colour(&current_colour, current_colour, 7); // Cycle through colours
         }
 
         // update components state based on program state
