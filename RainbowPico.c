@@ -2,7 +2,13 @@
 #include "pico/stdlib.h"
 #include "hardware/pwm.h"
 
-// define device's physical configuration
+// Define HIGH and LOW for clarity
+const bool HIGH = true;
+const bool LOW = false;
+
+//////////////////////////////
+// SECTION: PIN DEFINITIONS //
+//////////////////////////////
 const uint RED_LED_PIN = 13;
 const uint GREEN_LED_PIN = 14;
 const uint BLUE_LED_PIN = 15;
@@ -10,13 +16,47 @@ const uint BLUE_LED_PIN = 15;
 const uint ON_OFF_BUTTON_PIN = 0;
 const uint COLOUR_BUTTON_PIN = 1;
 
-// Define HIGH and LOW for clarity
-const bool HIGH = true;
-const bool LOW = false;
+/////////////////////////////////////
+// SECTION: LED COLOUR DEFINITIONS //
+/////////////////////////////////////
+typedef enum { RED, ORANGE, YELLOW, GREEN, BLUE, INDIGO, VIOLET, WHITE } Colours;
 
-// Define the colours we support in the LED
-typedef enum { RED, ORANGE, YELLOW, GREEN, BLUE, INDIGO, VIOLET } Colours;
+typedef struct {
+    const char* name;
+    uint8_t r, g, b;
+} ColourDef;
 
+static const ColourDef COLOUR_TABLE[] = {
+    [RED] = { "RED", 255, 0, 0 },
+    [ORANGE] = { "ORANGE", 255, 127, 0 },
+    [YELLOW] = { "YELLOW", 255, 255, 0 },
+    [GREEN] = { "GREEN", 0, 255, 0 },
+    [BLUE] = { "BLUE", 0, 0, 255 },
+    [INDIGO] = { "INDIGO", 75, 0, 130 },
+    [VIOLET] = { "VIOLET", 148, 0, 211 },
+    [WHITE] = { "WHITE", 255, 255, 255 }
+};
+
+#define NUM_COLOURS (sizeof(COLOUR_TABLE) / sizeof(COLOUR_TABLE[0]))
+
+const char* colour_to_string(Colours colour) {
+    return COLOUR_TABLE[colour].name;
+}
+
+Colours next_colour(Colours current) {
+    Colours next = (current + 1) % NUM_COLOURS;
+    printf("Colour changed to: %s\n", colour_to_string(next));
+    return next;
+}
+
+// Compensaste for different LEDs having different brightnesses at the same PWM level. These values are determined experimentally.
+#define RED_CHANNEL_SCALE 1.0f
+#define GREEN_CHANNEL_SCALE 0.5f
+#define BLUE_CHANNEL_SCALE 1.0f
+
+////////////////////////////
+// SECTION: HARDWARE INIT //
+////////////////////////////
 void init_button_pin(uint pin) {
     gpio_init(pin);
     gpio_set_dir(pin, GPIO_IN);
@@ -57,10 +97,28 @@ void init_led_pin_pwm(uint pin) {
     pwm_set_chan_level(slice_num, channel, 0); // Start with LED off
 }
 
+////////////////////////////////
+// SECTION: COMPONENT CONTROL //
+////////////////////////////////
 void set_led_brightness(uint pin, uint8_t brightness) {
     uint slice_num = pwm_gpio_to_slice_num(pin);
     uint channel = pwm_gpio_to_channel(pin);
     pwm_set_chan_level(slice_num, channel, brightness);
+}
+
+void set_led_rgb(uint8_t red, uint8_t green, uint8_t blue) {
+    set_led_brightness(RED_LED_PIN, (uint8_t)(red * RED_CHANNEL_SCALE));
+    set_led_brightness(GREEN_LED_PIN, (uint8_t)(green * GREEN_CHANNEL_SCALE));
+    set_led_brightness(BLUE_LED_PIN, (uint8_t)(blue * BLUE_CHANNEL_SCALE));
+}
+
+void update_light_state(bool led_on, Colours colour) {
+    if (!led_on) {
+        set_led_rgb(0, 0, 0); // Turn off all LEDs
+        return;
+    }
+    const ColourDef *c = &COLOUR_TABLE[colour];
+    set_led_rgb(c->r, c->g, c->b);
 }
 
 bool poll_button_click(uint pin) {
@@ -78,72 +136,10 @@ bool poll_button_click(uint pin) {
     return LOW;
 }
 
-char* colour_to_string(Colours colour) {
-    switch (colour) {
-        case RED:
-            return "RED";
-        case ORANGE:
-            return "ORANGE";
-        case YELLOW:
-            return "YELLOW";
-        case GREEN:
-            return "GREEN";
-        case BLUE:
-            return "BLUE";
-        case INDIGO:
-            return "INDIGO";
-        case VIOLET:
-            return "VIOLET";
-        default:
-            return "UNKNOWN";
-    }
-}
 
-int next_colour(int *current_colour, Colours colours, int num_colours) {
-    *current_colour = (*current_colour + 1) % num_colours;
-    printf("Colour changed to: %s\n", colour_to_string(*current_colour));
-    return *current_colour;
-}
-
-void set_led_rgb(uint8_t red, uint8_t green, uint8_t blue) {
-    set_led_brightness(RED_LED_PIN, red);
-    set_led_brightness(GREEN_LED_PIN, green);
-    set_led_brightness(BLUE_LED_PIN, blue);
-}
-
-void update_light_state(bool led_on, Colours colour) {
-    if (led_on) {
-        switch (colour) {
-            case RED:
-                set_led_rgb(255, 0, 0);
-                break;
-            case ORANGE:
-                set_led_rgb(255, 40, 0);
-                break;
-            case YELLOW:
-                set_led_rgb(255, 100, 0);
-                break;
-            case GREEN:
-                set_led_rgb(0, 255, 0);
-                break;
-            case BLUE:
-                set_led_rgb(0, 0, 255);
-                break;
-            case INDIGO:
-                set_led_rgb(75, 0, 130);
-                break;
-            case VIOLET:
-                set_led_rgb(148, 0, 211);
-                break;
-            default:
-                break;
-        }
-    } else {
-        // Turn off all LEDs
-        set_led_rgb(0, 0, 0);
-    }
-}
-
+///////////////////////////
+// SECTION: MAIN PROGRAM //
+///////////////////////////
 int main()
 {
     stdio_init_all();
@@ -177,7 +173,7 @@ int main()
             printf("LED On/Off button clicked. New state: %s\n", led_on ? "ON" : "OFF");
         }
         if (poll_button_click(COLOUR_BUTTON_PIN)) {
-            current_colour = next_colour(&current_colour, current_colour, 7); // Cycle through colours
+            current_colour = next_colour(current_colour); // Cycle through colours
         }
 
         // update components state based on program state
