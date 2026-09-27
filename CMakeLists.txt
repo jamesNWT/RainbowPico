@@ -1,14 +1,3 @@
-# Generated Cmake Pico project file
-
-cmake_minimum_required(VERSION 3.13)
-
-set(CMAKE_C_STANDARD 11)
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-
-# Initialise pico_sdk from installed location
-# (note this can come from environment, CMake cache etc)
-
 # == DO NOT EDIT THE FOLLOWING LINES for the Raspberry Pi Pico VS Code Extension to work ==
 if(WIN32)
     set(USERHOME $ENV{USERPROFILE})
@@ -25,34 +14,30 @@ endif()
 # ====================================================================================
 set(PICO_BOARD pico CACHE STRING "Board type")
 
-# Pull in Raspberry Pi Pico SDK (must be before project)
-include(pico_sdk_import.cmake)
+cmake_minimum_required(VERSION 3.13)
 
-project(RainbowPico C CXX ASM)
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+# Name project
+set(ProjectName RainbowPico)
+
+# Set any variables required for importing libraries
+set(FREERTOS_KERNEL_PATH ${CMAKE_CURRENT_SOURCE_DIR}/lib/FreeRTOS-Kernel)
+
+# Import those libraries
+include(pico_sdk_import.cmake)
+include(${FREERTOS_KERNEL_PATH}/portable/ThirdParty/GCC/RP2040/FreeRTOS_Kernel_import.cmake)
+
+# Define project
+project(${ProjectName} C CXX ASM)
 
 # Initialise the Raspberry Pi Pico SDK
 pico_sdk_init()
 
-# Add executable. Default name is the project name, version 0.1
+# Add subdirectories
+add_subdirectory(source)
 
-add_executable(RainbowPico RainbowPico.c )
-
-pico_set_program_name(RainbowPico "RainbowPico")
-pico_set_program_version(RainbowPico "0.1")
-
-# Modify the below lines to enable/disable output over UART/USB
-pico_enable_stdio_uart(RainbowPico 0)
-pico_enable_stdio_usb(RainbowPico 1)
-
-# Add the standard library to the build
-target_link_libraries(RainbowPico
-        pico_stdlib
-        hardware_pwm)
-
-# Add the standard include files to the build
-target_include_directories(RainbowPico PRIVATE
-        ${CMAKE_CURRENT_LIST_DIR}
-)
-
-pico_add_extra_outputs(RainbowPico)
-
+# if you have anything else in "lib" folder that needs its own CMakeLists.txt, add it here
+#add_subdirectory(lib)
