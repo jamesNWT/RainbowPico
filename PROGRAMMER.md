@@ -64,6 +64,10 @@ into domains of:
 ### Verify re-worked breadboard
 - Rewrote main program to verify buttons and basic LEDs are configured and initialized correctly.
 
+### Write fancy pwm-initialization function
+- Used bitmasks to ensure that each pwm slice is only initialized once, and channel output polarity can be set per-pin. Wasn't strictly necessary for this project but to me it just feels like the right way to do it. Now this function can be called on any pin without worrying about overwriting settings, with the caveat that the slice-level configuration is hardcoded into the function (wrap, clock divide).
+- Once this was done I rewrote the main program to verify that the RGB-LED pins were working as expected.
+
 ## Current goal
 
 Change the device from simply displaying a light into a hue-matching color game.

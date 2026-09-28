@@ -5,6 +5,8 @@
 #include "Hardware.h"
 #include "ComponentControl.h"
 
+// SECTION: COLOUR STUFF
+
 // Perceptual gamma - human brightness perception is nonlinear (~2.2 exponent is standard)
 uint8_t apply_gamma(uint8_t linear_value) {
     return (uint8_t)(powf(linear_value / 255.0f, 2.2f) * 255.0f + 0.5f);
@@ -29,38 +31,6 @@ uint8_t correct_channel(uint8_t raw, float channel_scale) {
 #define GREEN_CHANNEL_SCALE 0.7f
 #define BLUE_CHANNEL_SCALE 1.0f
 
-////////////////////////////
-// SECTION: HARDWARE INIT //
-////////////////////////////
-
-
-/*
- * Initialize the PWM for a given pin. The configuration of the PWM is set with the other function, init_pwm_slice, which is called once for each slice. This function is called 
- * for each pin that will use PWM.
- */
-void init_led_pin_pwm(uint pin) {
-    gpio_set_function(pin, GPIO_FUNC_PWM);
-
-    // Get the channel and slice for the pin. We could set manually by looking up the pin in the datasheet, but this is more flexible.
-    uint slice_num = pwm_gpio_to_slice_num(pin);
-    uint channel = pwm_gpio_to_channel(pin);
-
-    pwm_set_chan_level(slice_num, channel, 0); // Start with LED off
-}
-
-
-int check_buttons() {
-    if (is_button_clicked(UP_BUTTON_PIN)) {
-        printf("Up button clicked!\n");
-        return 1;
-        
-    } 
-    if (is_button_clicked(DOWN_BUTTON_PIN)) {
-        printf("Down button clicked!\n");
-        return 2;
-    }
-    return 0;
-}
 
 ///////////////////////////
 // SECTION: MAIN PROGRAM //
@@ -83,58 +53,24 @@ int main()
     init_button_pin(UP_BUTTON_PIN);
     init_button_pin(DOWN_BUTTON_PIN);
 
+    struct rgb_led target_rgb_led = build_rgb_led(TARGET_RGB_LED_R_PIN, TARGET_RGB_LED_G_PIN, TARGET_RGB_LED_B_PIN);
+    struct rgb_led play_rgb_led = build_rgb_led(PLAY_RGB_LED_R_PIN, PLAY_RGB_LED_G_PIN, PLAY_RGB_LED_B_PIN);
+
+    init_rgb_led(target_rgb_led);
+    init_rgb_led(play_rgb_led);
+
+
+    // DEBUG
+    set_led_rgb_hue(target_rgb_led, (struct rgb_color){.red = 255, .green = 125, .blue = 0});
+    set_led_rgb_hue(play_rgb_led, (struct rgb_color){.red = 50, .green = 50, .blue = 50});
+    turn_led_on(BLUE_LED_PIN);
+
     // Initialize state variables
 
     // Precomputations
     // compute_gamma_table();
 
     // Main loop
-    int state = 0;
-
     while (1) {
-        
-
-        switch (check_buttons()) {
-            case 1:
-                state++;
-                if (state > 3) state = 0; // Up button clicked
-                printf("State changed to %d\n", state);
-                break;
-            case 2:
-                state--; // Down button clicked
-                if (state < 0) state = 3;
-                printf("State changed to %d\n", state);
-                break;
-            default:
-                break;
-        }
-
-        switch (state) {
-            case 0:
-                turn_led_on(RED_LED_PIN);
-                turn_led_off(GREEN_LED_PIN);
-                turn_led_off(BLUE_LED_PIN);
-                break;
-            case 1:
-                turn_led_off(RED_LED_PIN);
-                turn_led_on(GREEN_LED_PIN);
-                turn_led_off(BLUE_LED_PIN);
-                break;
-            case 2:
-                turn_led_off(RED_LED_PIN);
-                turn_led_off(GREEN_LED_PIN);
-                turn_led_on(BLUE_LED_PIN);
-                break;
-            case 3:
-                turn_led_off(RED_LED_PIN);
-                turn_led_off(GREEN_LED_PIN);
-                turn_led_off(BLUE_LED_PIN);
-                break;
-            default:
-                turn_led_on(RED_LED_PIN);
-                turn_led_on(GREEN_LED_PIN);
-                turn_led_on(BLUE_LED_PIN);
-                break;
-        }
     }
 }

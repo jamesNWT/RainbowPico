@@ -1,5 +1,7 @@
 #include "ComponentControl.h"
 #include "Hardware.h"
+#include "hardware/pwm.h"
+#include <stdio.h>
 
 bool is_button_clicked(uint pin) {
     bool reading = gpio_get(pin);
@@ -22,4 +24,10 @@ void turn_led_on(uint pin) {
 
 void turn_led_off(uint pin) {
     gpio_put(pin, LOW);
+}
+
+void set_led_rgb_hue(struct rgb_led led, struct rgb_color color) {
+    pwm_set_chan_level(led.red.pwm_slice, led.red.pwm_channel, color.red);
+    pwm_set_chan_level(led.green.pwm_slice, led.green.pwm_channel, color.green);
+    pwm_set_chan_level(led.blue.pwm_slice, led.blue.pwm_channel, color.blue);
 }

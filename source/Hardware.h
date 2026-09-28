@@ -8,9 +8,9 @@
  * |    6 | target rgb led blue   | 3A          |
  * |    7 | target rgb led green  | 3B          |
  * |    8 | target rgb led red    | 4A          |
- * |   19 | play rgb led blue     | 4B          |
- * |   20 | play rgb led green    | 5A          |
- * |   21 | play rgb led red      | 5B          |
+ * |   19 | play rgb led blue     | 1B          |
+ * |   20 | play rgb led green    | 2A          |
+ * |   21 | play rgb led red      | 2B          |
  * +------+-----------------------+-------------+
  *
 */
@@ -41,20 +41,37 @@
 #define PLAY_RGB_LED_G_PIN 20U
 #define PLAY_RGB_LED_R_PIN 21U
 
+// Structure to represent a single PWM-controlled LED
+struct led_pwm {
+    uint pin;
+    uint pwm_channel; // NOTE: pico-sdk encodes A as 0 and B as 1.
+    uint pwm_slice;
+};
+
+// Structure to represent an RGB LED with its associated pwm pins
+struct rgb_led {
+    struct led_pwm red;
+    struct led_pwm green;
+    struct led_pwm blue;
+};
+
+// TODO: may want a color.h file
+struct rgb_color {
+    uint8_t red;
+    uint8_t green;
+    uint8_t blue;
+};
+
+struct rgb_led build_rgb_led(uint red_pin, uint green_pin, uint blue_pin);
 
 // Hardware initialization functions
 void init_button_pin(uint pin);
 
 void init_led_pin(uint pin, bool initial_state);
 
-void init_rgb_led_pins(uint red_pin, uint green_pin, uint blue_pin);
+void init_rgb_led(struct rgb_led led);
 
-// Other hardware-related definitions
-struct rgb_led {
-    uint red_pin;
-    uint green_pin;
-    uint blue_pin;
-};
+// Other hardware-related definition
 
 #define DEBOUNCE_DELAY_MS 20
 
