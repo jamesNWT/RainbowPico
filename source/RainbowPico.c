@@ -7,6 +7,9 @@
 #include "FreeRTOS.h"
 #include "task.h"
 #include "Color.h"
+#include "queue.h"
+
+static QueueHandle_t but_event_queue;
 
 void test_leds_task(void *pvParameters) {
     while(1) {
@@ -77,6 +80,61 @@ void color_sine_task(void *pvParameters) {
         }
     }
 }
+struct button_state {
+    uint pin;
+    bool is_pressed;
+    absolute_time_t time_changed;
+};
+
+void poll_button_task(void *pvParameters) {
+
+    uint pin = *((uint*)pvParameters);
+    struct button_state button = {.pin = pin};
+    bool last_state = HIGH;
+    while(1) {
+        bool state = get_button_state_debounced(pin);
+        if (state == LOW && last_state == HIGH){
+            button.is_pressed = true;
+            button.time_changed = get_absolute_time();
+            last_state = LOW;
+            xQueueSend(but_event_queue, &button, 0);
+        } else if (state == HIGH && last_state == LOW){
+            button.is_pressed = false;
+            button.time_changed = get_absolute_time();
+            last_state = HIGH;
+            xQueueSend(but_event_queue, &button, 0);
+        }
+    }
+}
+
+void respond_to_button_task(void *pvParameters) {
+
+    absolute_time_t time_last_up_press, time_last_down_press = 0;
+    
+    while(1) {
+        struct button_state state;
+        xQueueReceive(but_event_queue, &state, portMAX_DELAY);
+
+        if(state.is_pressed) {
+            printf("%s button pressed!\n", state.pin == UP_BUTTON_PIN ? "up" : "down");
+            if(state.pin == UP_BUTTON_PIN) {
+                time_last_up_press = state.time_changed;
+            } else {
+                time_last_down_press = state.time_changed;
+            }
+        }
+        if(!state.is_pressed) {
+            float time_held;
+            if(state.pin == UP_BUTTON_PIN) {
+                time_held = ((float)(state.time_changed - time_last_up_press)) * 0.000001;
+            } else {
+                time_held = ((float)(state.time_changed - time_last_down_press)) * 0.000001;
+            }
+            printf("%s button released! Time held: %.2f\n", state.pin == UP_BUTTON_PIN ? "up" : "down", time_held);
+        }
+
+    }
+}
 
 ///////////////////////////
 // SECTION: MAIN PROGRAM //
@@ -119,8 +177,20 @@ int main()
     xTaskCreate(test_leds_task, "TEST_LEDS_TASK", 256, NULL, 1, NULL);
     xTaskCreate(color_sine_task, "TEST_PLAY_RGB_LED", 256, &play_rgb_led, 1, NULL);
     xTaskCreate(color_sine_task, "TEST_TARGET_RGB_LED", 256, &target_rgb_led, 1, NULL);
+    
+    but_event_queue = xQueueCreate(10, sizeof(struct button_state));
+    const uint param_up_pin = UP_BUTTON_PIN;
+    const uint param_down_pin = DOWN_BUTTON_PIN;
+    xTaskCreate(poll_button_task, "POLL_UP_BUTTON_TASK", 256, &param_up_pin, 1, NULL);
+    xTaskCreate(poll_button_task, "POLL_DOWN_BUTTON_TASK", 256, &param_down_pin, 1, NULL);
+    xTaskCreate(respond_to_button_task, "RESPOND_TO_BUTTON_TASK", 256, NULL, 1, NULL);
 
+    
+ 
+    while(!stdio_usb_connected()) {
+        sleep_ms(100);
+    }
+    printf("Hello from RainbowPico!\n");
+    
     vTaskStartScheduler();
-
-    while (1) {};
 }

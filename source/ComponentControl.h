@@ -14,7 +14,7 @@ void turn_led_on(uint pin);
 
 void turn_led_off(uint pin);
 
-bool is_button_pressed(uint pin);
+bool get_button_state_debounced(uint pin);
 
 bool is_button_clicked(uint pin);
 

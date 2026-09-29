@@ -66,6 +66,6 @@ void init_rgb_led(struct rgb_led led);
 
 // Other hardware-related definition
 
-#define DEBOUNCE_DELAY_MS 20
+#define DEBOUNCE_DELAY_MS 10
 
 #endif

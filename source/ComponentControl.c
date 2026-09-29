@@ -19,6 +19,20 @@ bool is_button_clicked(uint pin) {
     return false;
 }
 
+bool get_button_state_debounced(uint pin) {
+    
+    while(1) {
+        bool initial_reading = gpio_get(pin);
+        sleep_ms(DEBOUNCE_DELAY_MS);
+        bool second_reading = gpio_get(pin);
+        if (initial_reading == HIGH && second_reading == HIGH) {
+            return HIGH;
+        } else if (initial_reading == LOW && second_reading == LOW) {
+            return LOW;
+        }
+    }
+}
+
 void turn_led_on(uint pin) {
     gpio_put(pin, HIGH);
 }
