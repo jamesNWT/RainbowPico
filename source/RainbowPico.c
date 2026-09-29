@@ -6,32 +6,7 @@
 #include "ComponentControl.h"
 #include "FreeRTOS.h"
 #include "task.h"
-
-// SECTION: COLOUR STUFF
-
-// Perceptual gamma - human brightness perception is nonlinear (~2.2 exponent is standard)
-uint8_t apply_gamma(uint8_t linear_value) {
-    return (uint8_t)(powf(linear_value / 255.0f, 2.2f) * 255.0f + 0.5f);
-}
-
-// Precompute a gamma correction table to avoid calling powf every main loop iteration.
-uint8_t GAMMA_TABLE[256];
-
-void compute_gamma_table(void) {
-    for (int i = 0; i < 256; ++i) {
-        GAMMA_TABLE[i] = apply_gamma(i);
-    }
-}
-
-uint8_t correct_channel(uint8_t raw, float channel_scale) {
-    uint8_t scaled = (uint8_t)(raw * channel_scale);
-    return GAMMA_TABLE[scaled];
-}
-
-// Compensaste for different LEDs having different brightnesses at the same PWM level. These values are determined experimentally.
-#define RED_CHANNEL_SCALE 1.0f
-#define GREEN_CHANNEL_SCALE 0.7f
-#define BLUE_CHANNEL_SCALE 1.0f
+#include "Color.h"
 
 void test_leds_task(void *pvParameters) {
     while(1) {
@@ -49,7 +24,7 @@ void test_leds_task(void *pvParameters) {
     }
 }
 
-void test_rgb_led_task(void *pvParameters) {
+void color_saw_task(void *pvParameters) {
 
     struct rgb_led the_rgb_led = *((struct rgb_led*)pvParameters);
 
@@ -75,6 +50,32 @@ void test_rgb_led_task(void *pvParameters) {
         vTaskDelay(10);
     }
 
+}
+
+void color_sine_task(void *pvParameters) {
+    struct rgb_led led = *((struct rgb_led*)pvParameters);
+
+    struct rgb_color color = {0, 0, 0};
+
+    float x = 0;
+    float delta = 0.025; // choose this value because it divides the range from 0 to 2*pi into roughly 255 steps.
+
+    float offset = 2.0*3.14159 / 3.f;
+
+    while(1) {
+        color.red = (uint8_t)((sin(x) + 1) * 127.5);
+        color.green = (uint8_t)((sin(x + offset) + 1) * 127.5);
+        color.blue = (uint8_t)((sin(x + 2*offset) + 1) * 127.5);
+
+        set_led_rgb_hue(led, color);
+        
+        x += delta;
+        vTaskDelay(10);
+
+        if (x >= 1000 * 2 * 3.14159) { // reset x at some multiple of 2*pi so that the reset should be smooth.
+            x = 0;
+        }
+    }
 }
 
 ///////////////////////////
@@ -113,11 +114,11 @@ int main()
     // Initialize state variables
 
     // Precomputations
-    // compute_gamma_table();
+    compute_gamma_table();
 
     xTaskCreate(test_leds_task, "TEST_LEDS_TASK", 256, NULL, 1, NULL);
-    xTaskCreate(test_rgb_led_task, "TEST_PLAY_RGB_LED", 256, &play_rgb_led, 1, NULL);
-    xTaskCreate(test_rgb_led_task, "TEST_TARGET_RGB_LED", 256, &target_rgb_led, 1, NULL);
+    xTaskCreate(color_sine_task, "TEST_PLAY_RGB_LED", 256, &play_rgb_led, 1, NULL);
+    xTaskCreate(color_sine_task, "TEST_TARGET_RGB_LED", 256, &target_rgb_led, 1, NULL);
 
     vTaskStartScheduler();
 

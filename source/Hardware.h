@@ -55,13 +55,6 @@ struct rgb_led {
     struct led_pwm blue;
 };
 
-// TODO: may want a color.h file
-struct rgb_color {
-    uint8_t red;
-    uint8_t green;
-    uint8_t blue;
-};
-
 struct rgb_led build_rgb_led(uint red_pin, uint green_pin, uint blue_pin);
 
 // Hardware initialization functions

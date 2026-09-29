@@ -2,6 +2,7 @@ add_executable(${ProjectName}
     RainbowPico.c
     Hardware.c
     ComponentControl.c
+    Color.c
 )
 
 pico_set_program_name(${ProjectName} "RainbowPico")
