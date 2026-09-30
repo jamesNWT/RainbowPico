@@ -71,6 +71,9 @@ into domains of:
 ### Better button polling
 - We can now detect when a button state changes, what state it is in, and how long a press is held.
 
+### Yet better button polling
+- We now have more precise button polling by implementing the poll as an ISR.
+
 ## Current goal
 
 Change the device from simply displaying a light into a hue-matching color game.

@@ -69,7 +69,7 @@ void init_rgb_led(struct rgb_led led) {
     gpio_set_function(led.red.pin, GPIO_FUNC_PWM);
     gpio_set_function(led.green.pin, GPIO_FUNC_PWM);
     gpio_set_function(led.blue.pin, GPIO_FUNC_PWM);
-    
+
     // Initialize the PWM slices for each color channel
     init_pwm_channel(led.red.pwm_slice, led.red.pwm_channel, true);
     init_pwm_channel(led.green.pwm_slice, led.green.pwm_channel, true);

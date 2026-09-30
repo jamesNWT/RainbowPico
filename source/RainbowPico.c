@@ -10,6 +10,8 @@
 #include "queue.h"
 
 static QueueHandle_t but_event_queue;
+static QueueHandle_t but_irq_queue;
+
 
 void test_leds_task(void *pvParameters) {
     while(1) {
@@ -86,30 +88,46 @@ struct button_state {
     absolute_time_t time_changed;
 };
 
-void poll_button_task(void *pvParameters) {
+struct but_irq {
+    uint pin;
+    absolute_time_t timestamp;
+};
 
-    uint pin = *((uint*)pvParameters);
-    struct button_state button = {.pin = pin};
-    bool last_state = HIGH;
+void button_interrupt_cb(uint gpio, uint32_t event_mask){
+    gpio_set_irq_enabled(gpio, event_mask, false);
+
+    struct but_irq irq = {.pin = gpio, .timestamp = get_absolute_time()};
+
+    xQueueSendFromISR(but_irq_queue, &irq, NULL);
+}
+
+void deferred_button_interupt_handler(void *pvParameters) {
+    struct but_irq irq;
+
+    bool last_up_state = HIGH, last_down_state = HIGH;
+
     while(1) {
-        bool state = get_button_state_debounced(pin);
-        if (state == LOW && last_state == HIGH){
-            button.is_pressed = true;
-            button.time_changed = get_absolute_time();
-            last_state = LOW;
+        xQueueReceive(but_irq_queue, &irq, portMAX_DELAY);
+        vTaskDelay(pdMS_TO_TICKS(DEBOUNCE_DELAY_MS));
+        bool check_again = gpio_get(irq.pin);
+
+        gpio_set_irq_enabled(irq.pin, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true); // re-enable irqs after debounce delay
+
+        if ((irq.pin == UP_BUTTON_PIN && check_again != last_up_state) || (irq.pin == DOWN_BUTTON_PIN && check_again != last_down_state)) {
+            struct button_state button = {.pin = irq.pin, .is_pressed = (check_again == LOW ? true : false), .time_changed = irq.timestamp};
             xQueueSend(but_event_queue, &button, 0);
-        } else if (state == HIGH && last_state == LOW){
-            button.is_pressed = false;
-            button.time_changed = get_absolute_time();
-            last_state = HIGH;
-            xQueueSend(but_event_queue, &button, 0);
+            if (irq.pin == UP_BUTTON_PIN) {
+                last_up_state = check_again;
+            } else {
+                last_down_state = check_again;
+            }
         }
     }
 }
 
 void respond_to_button_task(void *pvParameters) {
 
-    absolute_time_t time_last_up_press, time_last_down_press = 0;
+    absolute_time_t time_last_up_press = 0, time_last_down_press = 0;
     
     while(1) {
         struct button_state state;
@@ -117,6 +135,7 @@ void respond_to_button_task(void *pvParameters) {
 
         if(state.is_pressed) {
             printf("%s button pressed!\n", state.pin == UP_BUTTON_PIN ? "up" : "down");
+            turn_led_on(RED_LED_PIN);
             if(state.pin == UP_BUTTON_PIN) {
                 time_last_up_press = state.time_changed;
             } else {
@@ -130,7 +149,8 @@ void respond_to_button_task(void *pvParameters) {
             } else {
                 time_held = ((float)(state.time_changed - time_last_down_press)) * 0.000001;
             }
-            printf("%s button released! Time held: %.2f\n", state.pin == UP_BUTTON_PIN ? "up" : "down", time_held);
+            printf("%s button released! Time held: %.3f\n", state.pin == UP_BUTTON_PIN ? "up" : "down", time_held);
+            turn_led_off(RED_LED_PIN);
         }
 
     }
@@ -163,28 +183,25 @@ int main()
     init_rgb_led(target_rgb_led);
     init_rgb_led(play_rgb_led);
 
-
-    // DEBUG
-    // set_led_rgb_hue(target_rgb_led, (struct rgb_color){.red = 255, .green = 125, .blue = 0});
-    // set_led_rgb_hue(play_rgb_led, (struct rgb_color){.red = 50, .green = 50, .blue = 50});
-    // turn_led_on(BLUE_LED_PIN);
-
     // Initialize state variables
 
     // Precomputations
     compute_gamma_table();
 
-    xTaskCreate(test_leds_task, "TEST_LEDS_TASK", 256, NULL, 1, NULL);
+    // DEBUG LEDs
+    // xTaskCreate(test_leds_task, "TEST_LEDS_TASK", 256, NULL, 1, NULL);
     xTaskCreate(color_sine_task, "TEST_PLAY_RGB_LED", 256, &play_rgb_led, 1, NULL);
     xTaskCreate(color_sine_task, "TEST_TARGET_RGB_LED", 256, &target_rgb_led, 1, NULL);
     
     but_event_queue = xQueueCreate(10, sizeof(struct button_state));
-    const uint param_up_pin = UP_BUTTON_PIN;
-    const uint param_down_pin = DOWN_BUTTON_PIN;
-    xTaskCreate(poll_button_task, "POLL_UP_BUTTON_TASK", 256, &param_up_pin, 1, NULL);
-    xTaskCreate(poll_button_task, "POLL_DOWN_BUTTON_TASK", 256, &param_down_pin, 1, NULL);
     xTaskCreate(respond_to_button_task, "RESPOND_TO_BUTTON_TASK", 256, NULL, 1, NULL);
 
+    but_irq_queue = xQueueCreate(10, sizeof(struct but_irq));
+
+    gpio_set_irq_enabled_with_callback(UP_BUTTON_PIN, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true, button_interrupt_cb);
+    gpio_set_irq_enabled_with_callback(DOWN_BUTTON_PIN, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true, button_interrupt_cb);
+
+    xTaskCreate(deferred_button_interupt_handler, "DEFERRED_BUTTON_INTERUPT_HANDLER", 256, NULL, 2, NULL);
     
  
     while(!stdio_usb_connected()) {

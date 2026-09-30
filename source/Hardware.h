@@ -19,6 +19,8 @@
 #define HARDWARE_H
 
 #include "pico/stdlib.h"
+#include "hardware/gpio.h"
+#include "FreeRTOS.h"
 
 // Define HIGH and LOW for clarity
 #define HIGH 1
@@ -64,6 +66,7 @@ void init_led_pin(uint pin, bool initial_state);
 
 void init_rgb_led(struct rgb_led led);
 
+// void button_interrupt_cb(uint gpio, uint32_t event_mask);
 // Other hardware-related definition
 
 #define DEBOUNCE_DELAY_MS 10
