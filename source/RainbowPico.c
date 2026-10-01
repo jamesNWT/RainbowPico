@@ -201,15 +201,15 @@ TickType_t one_button_ticks_to_next_thresh(enum thresholds last_threshold, absol
 enum thresholds calculate_last_threshold_crossed(absolute_time_t dur_us)
 {
 
-    if (dur_us < SHORT_HOLD_CEILING_US)
+    if (dur_us <= SHORT_HOLD_CEILING_US)
     {
         return NONE;
     }
-    if (dur_us > SHORT_HOLD_CEILING_US && dur_us < MEDIUM_HOLD_CEILING_US)
+    if (dur_us > SHORT_HOLD_CEILING_US && dur_us <= MEDIUM_HOLD_CEILING_US)
     {
         return SHORT;
     }
-    if (dur_us > MEDIUM_HOLD_CEILING_US && dur_us < LONG_HOLD_FLOOR_US)
+    if (dur_us > MEDIUM_HOLD_CEILING_US && dur_us <= LONG_HOLD_FLOOR_US)
     {
         return MEDIUM;
     }
