@@ -90,6 +90,7 @@ void color_sine_task(void *pvParameters)
         }
     }
 }
+
 struct button_event
 {
     uint pin;
@@ -159,7 +160,9 @@ struct controller_state
     bool up_pressed;
     bool down_pressed;
     absolute_time_t up_dur;
+    absolute_time_t up_last_press_timestamp;
     absolute_time_t down_dur;
+    absolute_time_t down_last_press_timestamp;
     enum thresholds up_last_threshold_crossed;
     enum thresholds down_last_threshold_crossed;
     bool is_cont_adj; // flag for state where a button is being held for continuous channel adjustment
@@ -178,97 +181,20 @@ enum game_actions
     NO_OP
 };
 
- void button_controller_task(void *pvParameters)
+TickType_t one_button_ticks_to_next_thresh(enum thresholds last_threshold, absolute_time_t dur_us)
 {
-    absolute_time_t time_last_up_press = 0, time_last_down_press = 0, up_dur = 0, down_dur = 0;
-
-    struct button_event but_event_buf;
-
-    struct controller_state curr_state = {
-        .up_pressed = false,
-        .down_pressed = false,
-        .up_dur = 0,
-        .down_dur = 0,
-        .up_last_threshold_crossed = NONE,
-        .down_last_threshold_crossed = NONE,
-        .is_cont_adj = false};
-    
-    struct controller_state last_state;
-
-    enum game_actions next_action = NO_OP;
-
-    while (1)
+    switch (last_threshold)
     {
-
-        TickType_t ticks_until_next_threshold = portMAX_DELAY;
-        BaseType_t ret = xQueueReceive(but_event_queue, &but_event_buf, ticks_until_next_threshold);
-
-        last_state = curr_state; // I think this is shallow-copy safe!
-        // update the state
-        if (ret == pdPASS) {
-            determine_game_action_from_button_event(&curr_state, &but_event_buf);
-            next_action = update_controller_from_button_event(&curr_state, &but_event_buf);
-        } else {
-            next_action = INDICATE_HOLD_THRESHOLD_PASSED;
-            update_controller_state_from_threshold_event(&curr_state);
-        }
-        
-
-        // calculate the ticks until the next threshold
-        TickType_t up_ticks_to_next_thresh = one_button_ticks_to_next_thresh(curr_state.up_last_threshold_crossed, curr_state.up_dur);
-        TickType_t down_ticks_to_next_thresh = one_button_ticks_to_next_thresh(curr_state.down_last_threshold_crossed, curr_state.down_dur);
-        if (curr_state.up_pressed && !curr_state.down_pressed)
-        {
-            ticks_until_next_threshold = up_ticks_to_next_thresh;
-        }
-        else if (curr_state.down_pressed && !curr_state.up_pressed)
-        {
-            ticks_until_next_threshold = down_ticks_to_next_thresh;
-        }
-        else if (curr_state.down_pressed && curr_state.up_pressed)
-        {
-            ticks_until_next_threshold = up_ticks_to_next_thresh < down_ticks_to_next_thresh ? up_ticks_to_next_thresh : down_ticks_to_next_thresh;
-        }
-        else
-        {
-            ticks_until_next_threshold = portMAX_DELAY;
-        }
-
-        // determine what just happened
-    }
-}
-
-void update_controller_from_button_event(struct controller_state *state, struct button_event *but_event)
-{
-    if (but_event->pin == UP_BUTTON_PIN)
-    {
-        if (but_event->is_pressed)
-        {
-            state->up_pressed = true;
-            state->up_dur = get_absolute_time() - but_event->time_changed;
-            state->up_last_threshold_crossed = calculate_last_threshold_crossed(state->up_dur);
-        }
-        else
-        {
-            state->up_pressed = false;
-            state->up_dur = 0;
-            state->up_last_threshold_crossed = NONE;
-        }
-    }
-    else if (but_event->pin == DOWN_BUTTON_PIN)
-    {
-        if (but_event->is_pressed)
-        {
-            state->down_pressed = true;
-            state->down_dur = get_absolute_time() - but_event->time_changed;
-            state->down_dur = calculate_last_threshold_crossed(state->down_dur);
-        }
-        else
-        {
-            state->down_pressed = false;
-            state->down_dur = 0;
-            state->down_last_threshold_crossed = NONE;
-        }
+    case NONE:
+        return pdMS_TO_TICKS((SHORT_HOLD_CEILING_US - dur_us) * 0.001);
+    case SHORT:
+        return pdMS_TO_TICKS((MEDIUM_HOLD_CEILING_US - dur_us) * 0.001);
+    case MEDIUM:
+        return pdMS_TO_TICKS((LONG_HOLD_FLOOR_US - dur_us) * 0.001);
+    case LONG:
+        return portMAX_DELAY;
+    default:
+        return portMAX_DELAY;
     }
 }
 
@@ -290,22 +216,220 @@ enum thresholds calculate_last_threshold_crossed(absolute_time_t dur_us)
     return LONG;
 }
 
-TickType_t one_button_ticks_to_next_thresh(enum thresholds last_threshold, absolute_time_t dur_us)
+void update_controller_from_button_event(struct controller_state *state, struct button_event *but_event)
 {
-    switch (last_threshold)
+    if (but_event->pin == UP_BUTTON_PIN)
     {
-    case NONE:
-        return pdMS_TO_TICKS((SHORT_HOLD_CEILING_US - dur_us) * 0.001);
-    case SHORT:
-        return pdMS_TO_TICKS((MEDIUM_HOLD_CEILING_US - dur_us) * 0.001);
-    case MEDIUM:
-        return pdMS_TO_TICKS((LONG_HOLD_FLOOR_US - dur_us) * 0.001);
-    case LONG:
-        return portMAX_DELAY;
-    default:
-        return portMAX_DELAY;
+        if (but_event->is_pressed)
+        {
+            state->up_pressed = true;
+            state->up_last_press_timestamp = get_absolute_time();
+        }
+        else
+        {
+            state->up_pressed = false;
+            state->up_dur = 0;
+            state->up_last_threshold_crossed = NONE;
+        }
+    }
+    else if (but_event->pin == DOWN_BUTTON_PIN)
+    {
+        if (but_event->is_pressed)
+        {
+            state->down_pressed = true;
+            state->down_last_press_timestamp = get_absolute_time();
+        }
+        else
+        {
+            state->down_pressed = false;
+            state->down_dur = 0;
+            state->down_last_threshold_crossed = NONE;
+        }
     }
 }
+
+void update_controller_state_from_threshold_event(struct controller_state *state)
+{
+    if (state->up_pressed)
+    {
+        state->up_dur = get_absolute_time() - state->up_last_press_timestamp;
+        state->up_last_threshold_crossed = calculate_last_threshold_crossed(state->up_dur);
+    }
+    if (state->down_pressed)
+    {
+        state->down_dur = get_absolute_time() - state->down_last_press_timestamp;
+        state->down_last_threshold_crossed = calculate_last_threshold_crossed(state->down_dur);
+    }
+}
+
+enum game_actions determine_game_action_from_button_event(struct controller_state *state, struct button_event *event)
+{
+    enum button_event_type
+    {
+        UP_PRESS,
+        UP_RELEASE,
+        DOWN_PRESS,
+        DOWN_RELEASE,
+        UNDETERMINED
+    };
+
+    enum button_event_type event_type;
+
+    if (event->pin == UP_BUTTON_PIN)
+    {
+        if (!event->is_pressed && state->up_pressed)
+        {
+            event_type = UP_RELEASE;
+        }
+        else if (event->is_pressed && !state->up_pressed)
+        {
+            event_type = UP_PRESS;
+        }
+        else
+        {
+            event_type = UNDETERMINED;
+        }
+    }
+    else
+    {
+        if (!event->is_pressed && state->down_pressed)
+        {
+            event_type = DOWN_RELEASE;
+        }
+        else if (event->is_pressed && !state->down_pressed)
+        {
+            event_type = DOWN_PRESS;
+        }
+        else
+        {
+            event_type = UNDETERMINED;
+        }
+    }
+
+    if (event_type == UP_PRESS)
+    {
+        if (state->down_pressed)
+        {
+            return NO_OP;
+        }
+        else
+        {
+            return INCREMENT_COLOR_CHANNEL;
+        }
+    }
+    if (event_type == DOWN_PRESS)
+    {
+        if (state->up_pressed)
+        {
+            return NO_OP;
+        }
+        else
+        {
+            return DECREMENT_COLOR_CHANNEL;
+        }
+    }
+    return NO_OP;
+}
+
+void button_controller_task(void *pvParameters)
+{
+    absolute_time_t time_last_up_press = 0, time_last_down_press = 0, up_dur = 0, down_dur = 0;
+
+    struct button_event but_event_buf;
+
+    struct controller_state curr_state = {
+        .up_pressed = false,
+        .up_dur = 0,
+        .up_last_press_timestamp = 0,
+        .up_last_threshold_crossed = NONE,
+
+        .down_pressed = false,
+        .down_dur = 0,
+        .down_last_press_timestamp = 0,
+        .down_last_threshold_crossed = NONE,
+
+        .is_cont_adj = false};
+
+    // struct controller_state last_state;
+
+    enum game_actions next_action = NO_OP;
+
+    TickType_t ticks_until_next_threshold = portMAX_DELAY;
+    enum threshold_trigger {
+        UP,
+        DOWN
+    };
+
+    enum threshold_trigger tt;
+    while (1)
+    {
+
+        
+        BaseType_t ret = xQueueReceive(but_event_queue, &but_event_buf, ticks_until_next_threshold);
+
+        // update the state
+        if (ret == pdPASS)
+        {
+            next_action = determine_game_action_from_button_event(&curr_state, &but_event_buf);
+            update_controller_from_button_event(&curr_state, &but_event_buf);
+        }
+        else
+        {
+            next_action = INDICATE_HOLD_THRESHOLD_PASSED;
+            update_controller_state_from_threshold_event(&curr_state);
+        }
+
+        // calculate the ticks until the next threshold
+        TickType_t up_ticks_to_next_thresh = one_button_ticks_to_next_thresh(curr_state.up_last_threshold_crossed, curr_state.up_dur);
+        TickType_t down_ticks_to_next_thresh = one_button_ticks_to_next_thresh(curr_state.down_last_threshold_crossed, curr_state.down_dur);
+        if (curr_state.up_pressed && !curr_state.down_pressed)
+        {
+            ticks_until_next_threshold = up_ticks_to_next_thresh;
+            tt = UP;
+            
+        }
+        else if (curr_state.down_pressed && !curr_state.up_pressed)
+        {
+            ticks_until_next_threshold = down_ticks_to_next_thresh;
+            tt = DOWN;
+        }
+        else if (curr_state.down_pressed && curr_state.up_pressed)
+        {
+            if (up_ticks_to_next_thresh < down_ticks_to_next_thresh) {
+                ticks_until_next_threshold = up_ticks_to_next_thresh;
+                tt = UP;
+            } else {
+                ticks_until_next_threshold = down_ticks_to_next_thresh;
+                tt = DOWN;
+            }
+        }
+        else
+        {
+            ticks_until_next_threshold = portMAX_DELAY;
+        }
+
+        // do the next action
+        switch (next_action)
+        {
+        case NO_OP:
+            printf("CONTROLLER EVENT DETECTED BUT NO OPERATION TO DO\n");
+            break;
+        case INCREMENT_COLOR_CHANNEL:
+            printf("EVENT DETECTED: INCREMENT COLOR CHANNEL\n");
+            break;
+        case DECREMENT_COLOR_CHANNEL:
+            printf("EVENT DETECTED: DECREMENT_COLOR_CHANNEL\n");
+            break;
+        case INDICATE_HOLD_THRESHOLD_PASSED:
+            printf("HOLD THRESHOLD PASSED: %s button held: %.3f\n", tt == UP ? "up" : "down", tt == UP ? (float)curr_state.up_dur*0.000001 : (float)curr_state.down_dur*0.000001);
+            break;
+        default:
+            printf("UNEXEPECTED NEXT ACTION!\n");
+            break;
+        }
+    }
+}
+
 ///////////////////////////
 // SECTION: MAIN PROGRAM //
 ///////////////////////////
