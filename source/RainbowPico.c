@@ -101,14 +101,14 @@ struct button_event
 struct but_irq
 {
     uint pin;
-    absolute_time_t timestamp;
+    absolute_time_t time;
 };
 
 void button_interrupt_cb(uint gpio, uint32_t event_mask)
 {
     gpio_set_irq_enabled(gpio, event_mask, false);
 
-    struct but_irq irq = {.pin = gpio, .timestamp = get_absolute_time()};
+    struct but_irq irq = {.pin = gpio, .time = get_absolute_time()};
 
     xQueueSendFromISR(but_irq_queue, &irq, NULL);
 }
@@ -129,7 +129,7 @@ void deferred_button_interupt_handler(void *pvParameters)
 
         if ((irq.pin == UP_BUTTON_PIN && check_again != last_up_state) || (irq.pin == DOWN_BUTTON_PIN && check_again != last_down_state))
         {
-            struct button_event button = {.pin = irq.pin, .is_pressed = (check_again == LOW ? true : false), .time_changed = irq.timestamp};
+            struct button_event button = {.pin = irq.pin, .is_pressed = (check_again == LOW ? true : false), .time_changed = irq.time};
             xQueueSend(but_event_queue, &button, 0);
             if (irq.pin == UP_BUTTON_PIN)
             {
@@ -147,60 +147,50 @@ void deferred_button_interupt_handler(void *pvParameters)
 #define MEDIUM_HOLD_CEILING_US 1000 * 1000
 #define LONG_HOLD_FLOOR_US 2500 * 1000
 
-enum thresholds
+typedef enum
 {
     SHORT,
     MEDIUM,
     LONG,
     NONE
+} threshold;
+
+struct button {
+    bool is_pressed;
+    threshold last_crossed;
+    absolute_time_t time_press;
 };
+
+#define ABSOLUTE_TIME_MAX UINT64_MAX
 
 struct controller_state
 {
-    bool up_pressed;
-    bool down_pressed;
-    absolute_time_t up_dur;
-    absolute_time_t up_last_press_timestamp;
-    absolute_time_t down_dur;
-    absolute_time_t down_last_press_timestamp;
-    enum thresholds up_last_threshold_crossed;
-    enum thresholds down_last_threshold_crossed;
+    struct button up;
+    struct button down;
     bool is_cont_adj; // flag for state where a button is being held for continuous channel adjustment
+    // bool is_double_press;
 };
 
-enum game_actions
+typedef enum
 {
     INCREMENT_COLOR_CHANNEL,
     DECREMENT_COLOR_CHANNEL,
-    CONT_INC_COLOR_CHANNEL,
-    CONT_DEC_COLOR_CHANNEL,
+    START_CONT_INC_COLOR_CHANNEL,
+    STOP_CONT_INC_COLOR_CHANNEL,
+    START_CONT_DEC_COLOR_CHANNEL,
+    STOP_CONT_DEC_COLOR_CHANNEL,
     SWTICH_COLOR_CHANNEL,
     CONFIRM_GUESS,
     START_NEW_GAME,
     INDICATE_HOLD_THRESHOLD_PASSED,
     NO_OP
-};
+} game_action;
 
-TickType_t one_button_ticks_to_next_thresh(enum thresholds last_threshold, absolute_time_t dur_us)
+threshold get_last_threshold_crossed(absolute_time_t dur_us)
 {
-    switch (last_threshold)
-    {
-    case NONE:
-        return pdMS_TO_TICKS((SHORT_HOLD_CEILING_US - dur_us) * 0.001);
-    case SHORT:
-        return pdMS_TO_TICKS((MEDIUM_HOLD_CEILING_US - dur_us) * 0.001);
-    case MEDIUM:
-        return pdMS_TO_TICKS((LONG_HOLD_FLOOR_US - dur_us) * 0.001);
-    case LONG:
-        return portMAX_DELAY;
-    default:
-        return portMAX_DELAY;
+    if (dur_us == UINT64_MAX){ // UINT64_MAX is our indication that the button has not been pressed.
+        return NONE;
     }
-}
-
-enum thresholds calculate_last_threshold_crossed(absolute_time_t dur_us)
-{
-
     if (dur_us <= SHORT_HOLD_CEILING_US)
     {
         return NONE;
@@ -216,197 +206,246 @@ enum thresholds calculate_last_threshold_crossed(absolute_time_t dur_us)
     return LONG;
 }
 
-void update_controller_from_button_event(struct controller_state *state, struct button_event *but_event)
+TickType_t get_ticks_until_next_threshold(absolute_time_t dur_us)
 {
-    if (but_event->pin == UP_BUTTON_PIN)
-    {
-        if (but_event->is_pressed)
-        {
-            state->up_pressed = true;
-            state->up_last_press_timestamp = get_absolute_time();
-        }
-        else
-        {
-            state->up_pressed = false;
-            state->up_dur = 0;
-            state->up_last_threshold_crossed = NONE;
-        }
+    if (dur_us == UINT64_MAX){ // UINT64_MAX is our indication that the button has not been pressed.
+        return portMAX_DELAY;
     }
-    else if (but_event->pin == DOWN_BUTTON_PIN)
+    threshold last_threshold = get_last_threshold_crossed(dur_us);
+    switch (last_threshold)
     {
-        if (but_event->is_pressed)
-        {
-            state->down_pressed = true;
-            state->down_last_press_timestamp = get_absolute_time();
-        }
-        else
-        {
-            state->down_pressed = false;
-            state->down_dur = 0;
-            state->down_last_threshold_crossed = NONE;
-        }
+    case NONE:
+        return pdMS_TO_TICKS((SHORT_HOLD_CEILING_US - dur_us) * 0.001);
+    case SHORT:
+        return pdMS_TO_TICKS((MEDIUM_HOLD_CEILING_US - dur_us) * 0.001);
+    case MEDIUM:
+        return pdMS_TO_TICKS((LONG_HOLD_FLOOR_US - dur_us) * 0.001);
+    case LONG:
+        return portMAX_DELAY;
+    default:
+        return portMAX_DELAY;
     }
 }
 
-void update_controller_state_from_threshold_event(struct controller_state *state)
+void update_controller_button_state(struct button *button, struct button_event *event)
 {
-    if (state->up_pressed)
-    {
-        state->up_dur = get_absolute_time() - state->up_last_press_timestamp;
-        state->up_last_threshold_crossed = calculate_last_threshold_crossed(state->up_dur);
-    }
-    if (state->down_pressed)
-    {
-        state->down_dur = get_absolute_time() - state->down_last_press_timestamp;
-        state->down_last_threshold_crossed = calculate_last_threshold_crossed(state->down_dur);
+    if (event->is_pressed) {
+        button->is_pressed = true;
+        button->time_press = event->time_changed;
+    } else {
+        button->is_pressed = false;
+        button->time_press = ABSOLUTE_TIME_MAX;
     }
 }
 
-enum game_actions determine_game_action_from_button_event(struct controller_state *state, struct button_event *event)
+game_action get_game_action_from_double_press_release(threshold last_crossed_1, threshold last_crossed_2)
 {
-    enum button_event_type
+    threshold shortest_threshold_reached = LONG;
+    if (last_crossed_1 <= last_crossed_2)
     {
-        UP_PRESS,
-        UP_RELEASE,
-        DOWN_PRESS,
-        DOWN_RELEASE,
-        UNDETERMINED
-    };
-
-    enum button_event_type event_type;
-
-    if (event->pin == UP_BUTTON_PIN)
+        shortest_threshold_reached = last_crossed_1;
+    }
+    else
     {
-        if (!event->is_pressed && state->up_pressed)
+        shortest_threshold_reached = last_crossed_2;
+    }
+    switch (shortest_threshold_reached)
+    {
+    case NONE:
+        return SWTICH_COLOR_CHANNEL;
+    case SHORT:
+        return CONFIRM_GUESS;
+    case MEDIUM:
+        return START_NEW_GAME;
+    case LONG:
+        return START_NEW_GAME;
+    default:
+        return START_NEW_GAME;
+    }
+}
+
+game_action button_event_controller_handler(struct controller_state *controller, struct button_event *but_event)
+{
+    game_action ret = NO_OP;
+    bool is_release_event = false;
+    const absolute_time_t double_press_detection_ceiling_us = 100;
+    switch (but_event->pin) {
+        case UP_BUTTON_PIN:
+            if (but_event->is_pressed) { // PRESS EVENT
+                if (!controller->down.is_pressed) {
+                    ret = INCREMENT_COLOR_CHANNEL;
+                }
+            } else { // RELEASE EVENT
+                if (controller->is_cont_adj) {
+                    if (controller->up.is_pressed) { // CONTINUOUS INCREMENT STOPPED
+                        ret = STOP_CONT_INC_COLOR_CHANNEL;
+                        controller->is_cont_adj = false;
+                    }
+                } else if (controller->down.is_pressed){ // RELEASE HAPPENS FROM DOUBLE PRESS STATE, AND WE'RE NOT IN CONTINUOUS ADJUSTMENT MODE
+                    ret = get_game_action_from_double_press_release(controller->up.last_crossed, controller->down.last_crossed);
+                }
+            }
+            update_controller_button_state(&controller->up, but_event);
+            break;
+        case DOWN_BUTTON_PIN:
+            if (but_event->is_pressed) {
+                if (!controller->up.is_pressed) {
+                    ret = DECREMENT_COLOR_CHANNEL;
+                }
+            } else { // RELEASE EVENT
+                if (controller->is_cont_adj) {
+                    if (controller->down.is_pressed) { // CONTINUOUS DECREMENT STOPPED
+                        ret = STOP_CONT_DEC_COLOR_CHANNEL;
+                        controller->is_cont_adj = false;
+                    }
+                } else if (controller->up.is_pressed){ // RELEASE HAPPENS FROM DOUBLE PRESS STATE, AND WE'RE NOT IN CONTINUOUS ADJUSTMENT MODE
+                    ret = get_game_action_from_double_press_release(controller->up.last_crossed, controller->down.last_crossed);
+                }
+            }
+            update_controller_button_state(&controller->down, but_event);
+            break;
+        default:
+            break;
+    }
+    return ret;
+}
+
+enum threshold_trigger
+{
+    TT_UP_BUTTON,
+    TT_DOWN_BUTTON,
+    TT_MAX_DELAY
+};
+
+struct threshold_action_and_trigger {
+    game_action action;
+    enum threshold_trigger trigger;
+};
+
+struct threshold_action_and_trigger threshold_event_controller_handler(struct controller_state *controller, absolute_time_t event_time)
+{
+
+    // calculate the button hold durations, letting UINT64_MAX be the value for buttons that are not pressed.
+    absolute_time_t button_duration_up = controller->up.is_pressed ? event_time - controller->up.time_press : UINT64_MAX;
+    absolute_time_t button_duration_down = controller->down.is_pressed ? event_time - controller->down.time_press : UINT64_MAX;
+    threshold up_threshold_check = get_last_threshold_crossed(button_duration_up);
+    threshold down_threshold_check = get_last_threshold_crossed(button_duration_down);
+
+    struct threshold_action_and_trigger ret;
+
+    if (up_threshold_check != controller->up.last_crossed && up_threshold_check == SHORT && !controller->is_cont_adj)
+    {
+        ret.action = START_CONT_INC_COLOR_CHANNEL;
+        ret.trigger = TT_UP_BUTTON;
+        controller->up.last_crossed = up_threshold_check;
+        controller->is_cont_adj = true;
+        return ret;
+    }
+    else if (down_threshold_check != controller->down.last_crossed && down_threshold_check == SHORT && !controller->is_cont_adj)
+    {
+        ret.action = START_CONT_DEC_COLOR_CHANNEL;
+        ret.trigger = TT_DOWN_BUTTON;
+        controller->down.last_crossed = down_threshold_check;
+        controller->is_cont_adj = true;
+        return ret;
+    }
+    else if (down_threshold_check != controller->down.last_crossed || up_threshold_check != controller->down.last_crossed && !controller->is_cont_adj)
+    {
+        // only indicate threshold passed if both buttons are held down, and we're not in continuous adjustment mode
+        if (controller->down.is_pressed && controller->up.is_pressed)
         {
-            event_type = UP_RELEASE;
-        }
-        else if (event->is_pressed && !state->up_pressed)
-        {
-            event_type = UP_PRESS;
-        }
-        else
-        {
-            event_type = UNDETERMINED;
+            bool down_trailing = controller->down.time_press < controller->up.time_press;
+            // furthermore, only indicate threshold passed for the trailing button in the double press.
+            if (down_trailing && down_threshold_check != controller->down.last_crossed)
+            {
+                ret.action = INDICATE_HOLD_THRESHOLD_PASSED;
+                ret.trigger = TT_DOWN_BUTTON;
+            }
+            else if (!down_trailing && up_threshold_check != controller->up.last_crossed)
+            {
+                ret.action = INDICATE_HOLD_THRESHOLD_PASSED;
+                ret.trigger = TT_UP_BUTTON;
+            }
         }
     }
     else
     {
-        if (!event->is_pressed && state->down_pressed)
+        ret.action = NO_OP;
+        if (up_threshold_check != controller->up.last_crossed)
         {
-            event_type = DOWN_RELEASE;
+            ret.trigger = TT_UP_BUTTON;
         }
-        else if (event->is_pressed && !state->down_pressed)
+        else if (down_threshold_check != controller->down.last_crossed)
         {
-            event_type = DOWN_PRESS;
-        }
-        else
-        {
-            event_type = UNDETERMINED;
-        }
-    }
-
-    if (event_type == UP_PRESS)
-    {
-        if (state->down_pressed)
-        {
-            return NO_OP;
+            ret.trigger = TT_DOWN_BUTTON;
         }
         else
         {
-            return INCREMENT_COLOR_CHANNEL;
+            ret.trigger = TT_MAX_DELAY;
         }
     }
-    if (event_type == DOWN_PRESS)
-    {
-        if (state->up_pressed)
-        {
-            return NO_OP;
-        }
-        else
-        {
-            return DECREMENT_COLOR_CHANNEL;
-        }
-    }
-    return NO_OP;
 }
 
 void button_controller_task(void *pvParameters)
 {
-    absolute_time_t time_last_up_press = 0, time_last_down_press = 0, up_dur = 0, down_dur = 0;
-
     struct button_event but_event_buf;
 
-    struct controller_state curr_state = {
-        .up_pressed = false,
-        .up_dur = 0,
-        .up_last_press_timestamp = 0,
-        .up_last_threshold_crossed = NONE,
-
-        .down_pressed = false,
-        .down_dur = 0,
-        .down_last_press_timestamp = 0,
-        .down_last_threshold_crossed = NONE,
-
-        .is_cont_adj = false};
-
-    // struct controller_state last_state;
-
-    enum game_actions next_action = NO_OP;
-
-    TickType_t ticks_until_next_threshold = portMAX_DELAY;
-    enum threshold_trigger {
-        UP,
-        DOWN
+    struct controller_state controller = {
+        .up = {
+            .is_pressed = false,
+            .time_press = 0,
+            .last_crossed = NONE
+        },
+        .down = {
+            .is_pressed = false,
+            .time_press = 0,
+            .last_crossed = NONE
+        },
+        .is_cont_adj = false
     };
 
-    enum threshold_trigger tt;
+    game_action next_action = NO_OP;
+
+    TickType_t ticks_until_next_threshold = portMAX_DELAY;
+
+    enum threshold_trigger threshold_trigger = TT_MAX_DELAY;
+
+    struct
+    {
+        absolute_time_t up;
+        absolute_time_t down;
+    } button_durations;
+
     while (1)
     {
-
-        
         BaseType_t ret = xQueueReceive(but_event_queue, &but_event_buf, ticks_until_next_threshold);
+        absolute_time_t event_time = get_absolute_time();
 
         // update the state
         if (ret == pdPASS)
         {
-            next_action = determine_game_action_from_button_event(&curr_state, &but_event_buf);
-            update_controller_from_button_event(&curr_state, &but_event_buf);
+            next_action = button_event_controller_handler(&controller, &but_event_buf);
         }
         else
         {
-            next_action = INDICATE_HOLD_THRESHOLD_PASSED;
-            update_controller_state_from_threshold_event(&curr_state);
+            struct threshold_action_and_trigger next_action_and_trigger = threshold_event_controller_handler(&controller, event_time);
+            next_action = next_action_and_trigger.action;
+            threshold_trigger = next_action_and_trigger.trigger;
         }
 
         // calculate the ticks until the next threshold
-        TickType_t up_ticks_to_next_thresh = one_button_ticks_to_next_thresh(curr_state.up_last_threshold_crossed, curr_state.up_dur);
-        TickType_t down_ticks_to_next_thresh = one_button_ticks_to_next_thresh(curr_state.down_last_threshold_crossed, curr_state.down_dur);
-        if (curr_state.up_pressed && !curr_state.down_pressed)
-        {
-            ticks_until_next_threshold = up_ticks_to_next_thresh;
-            tt = UP;
-            
+        // calculate the button hold durations, letting UINT64_MAX be the value for buttons that are not pressed.
+        button_durations.up = controller.up.is_pressed ? event_time - controller.up.time_press : UINT64_MAX;
+        button_durations.down = controller.down.is_pressed ? event_time - controller.down.time_press : UINT64_MAX;
+        absolute_time_t down_ticks_until_next_threshold;
+        absolute_time_t up_ticks_until_next_threshold;
+        if (controller.down.is_pressed) {
+            down_ticks_until_next_threshold = get_ticks_until_next_threshold(button_durations.down);
         }
-        else if (curr_state.down_pressed && !curr_state.up_pressed)
-        {
-            ticks_until_next_threshold = down_ticks_to_next_thresh;
-            tt = DOWN;
+        if (controller.up.is_pressed) {
+            up_ticks_until_next_threshold = get_ticks_until_next_threshold(button_durations.up);
         }
-        else if (curr_state.down_pressed && curr_state.up_pressed)
-        {
-            if (up_ticks_to_next_thresh < down_ticks_to_next_thresh) {
-                ticks_until_next_threshold = up_ticks_to_next_thresh;
-                tt = UP;
-            } else {
-                ticks_until_next_threshold = down_ticks_to_next_thresh;
-                tt = DOWN;
-            }
-        }
-        else
-        {
-            ticks_until_next_threshold = portMAX_DELAY;
-        }
+        ticks_until_next_threshold = down_ticks_until_next_threshold < up_ticks_until_next_threshold ? down_ticks_until_next_threshold : up_ticks_until_next_threshold;        
 
         // do the next action
         switch (next_action)
@@ -418,13 +457,47 @@ void button_controller_task(void *pvParameters)
             printf("EVENT DETECTED: INCREMENT COLOR CHANNEL\n");
             break;
         case DECREMENT_COLOR_CHANNEL:
-            printf("EVENT DETECTED: DECREMENT_COLOR_CHANNEL\n");
+            printf("EVENT DETECTED: DECREMENT COLOR CHANNEL\n");
+            break;
+        case START_CONT_INC_COLOR_CHANNEL:
+            printf("START CONTINUOUSLY INCREASING COLOR CHANNEL\n");
+            break;
+        case STOP_CONT_INC_COLOR_CHANNEL:
+            printf("STOP CONTINUOUSLY INCREASING COLOR CHANNEL\n");
+            break;
+        case START_CONT_DEC_COLOR_CHANNEL:
+            printf("START CONTINUOUSLY DECREASING COLOR CHANNEL\n");
+            break;
+        case STOP_CONT_DEC_COLOR_CHANNEL:
+            printf("STOP CONTINUOUSLY DECREASING COLOR CHANNEL\n");
+            break;
+        case SWTICH_COLOR_CHANNEL:
+            printf("SWITCH COLOR CHANNEL\n");
+            break;
+        case CONFIRM_GUESS:
+            printf("CONFIRM GUESS\n");
+            break;
+        case START_NEW_GAME:
+            printf("START NEW GAME\n");
             break;
         case INDICATE_HOLD_THRESHOLD_PASSED:
-            printf("HOLD THRESHOLD PASSED: %s button held: %.3f\n", tt == UP ? "up" : "down", tt == UP ? (float)curr_state.up_dur*0.000001 : (float)curr_state.down_dur*0.000001);
+            char* trigger_display;
+            float duration_display;
+
+            if (threshold_trigger == TT_UP_BUTTON) {
+                trigger_display = "up";
+                duration_display = get_absolute_time() - controller.up.time_press;
+            } else if (threshold_trigger == TT_DOWN_BUTTON) {
+                trigger_display = "down";
+                duration_display = get_absolute_time() - controller.down.time_press;
+            } else {
+                printf("Something strange happened\n");
+                break;
+            }
+            printf("HOLD THRESHOLD PASSED: %s button held: %.3f\n", trigger_display, duration_display);
             break;
         default:
-            printf("UNEXEPECTED NEXT ACTION!\n");
+            printf("UNEXEPECTED NEXT ACTION: %d\n", next_action);
             break;
         }
     }
