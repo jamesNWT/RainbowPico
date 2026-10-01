@@ -21,27 +21,11 @@
 #include "pico/stdlib.h"
 #include "hardware/gpio.h"
 #include "FreeRTOS.h"
+#include "Pins.h"
 
 // Define HIGH and LOW for clarity
 #define HIGH 1
 #define LOW 0
-
-
-// Pin definitions
-#define RED_LED_PIN 2U
-#define GREEN_LED_PIN 3U
-#define BLUE_LED_PIN 4U 
-
-#define TARGET_RGB_LED_B_PIN 6U
-#define TARGET_RGB_LED_G_PIN 7U
-#define TARGET_RGB_LED_R_PIN 8U
-
-#define UP_BUTTON_PIN 14U
-#define DOWN_BUTTON_PIN 15U
-
-#define PLAY_RGB_LED_B_PIN 19U
-#define PLAY_RGB_LED_G_PIN 20U
-#define PLAY_RGB_LED_R_PIN 21U
 
 // Structure to represent a single PWM-controlled LED
 struct led_pwm {
