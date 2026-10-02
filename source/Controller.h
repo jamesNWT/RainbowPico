@@ -28,10 +28,10 @@ struct button_event
 
 typedef enum
 {
-    SHORT,
-    MEDIUM,
-    LONG,
-    NONE
+    NONE = 0,
+    SHORT = 1,
+    MEDIUM = 2,
+    LONG = 3
 } threshold;
 
 struct button {
