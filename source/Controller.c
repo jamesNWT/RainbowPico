@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include "Controller.h"
 
 void controller_init(struct controller_state *controller)
@@ -93,7 +94,7 @@ game_action get_game_action_from_double_press_release(threshold last_crossed_1, 
     switch (shortest_threshold_reached)
     {
     case NONE:
-        return SWTICH_COLOR_CHANNEL;
+        return NEXT_COLOR_CHANNEL;
     case SHORT:
         return CONFIRM_GUESS;
     case MEDIUM:
@@ -112,12 +113,12 @@ game_action button_event_controller_handler(struct controller_state *controller,
         case UP_BUTTON_PIN:
             if (but_event->is_pressed) { // PRESS EVENT
                 if (!controller->down.is_pressed) {
-                    ret = INCREMENT_COLOR_CHANNEL;
+                    ret = INCREMENT_CHANNEL_VALUE;
                 }
             } else { // RELEASE EVENT
                 if (controller->is_cont_adj) {
                     if (controller->up.is_pressed) { // CONTINUOUS INCREMENT STOPPED
-                        ret = STOP_CONT_INC_COLOR_CHANNEL;
+                        ret = STOP_CONT_INC_CHANNEL_VALUE;
                         controller->is_cont_adj = false;
                     }
                 } else if (controller->down.is_pressed){ // RELEASE HAPPENS FROM DOUBLE PRESS STATE, AND WE'RE NOT IN CONTINUOUS ADJUSTMENT MODE
@@ -129,12 +130,12 @@ game_action button_event_controller_handler(struct controller_state *controller,
         case DOWN_BUTTON_PIN:
             if (but_event->is_pressed) {
                 if (!controller->up.is_pressed) {
-                    ret = DECREMENT_COLOR_CHANNEL;
+                    ret = DECREMENT_CHANNEL_VALUE;
                 }
             } else { // RELEASE EVENT
                 if (controller->is_cont_adj) {
                     if (controller->down.is_pressed) { // CONTINUOUS DECREMENT STOPPED
-                        ret = STOP_CONT_DEC_COLOR_CHANNEL;
+                        ret = STOP_CONT_DEC_CHANNEL_VALUE;
                         controller->is_cont_adj = false;
                     }
                 } else if (controller->up.is_pressed){ // RELEASE HAPPENS FROM DOUBLE PRESS STATE, AND WE'RE NOT IN CONTINUOUS ADJUSTMENT MODE
@@ -162,7 +163,7 @@ struct threshold_action_and_trigger threshold_event_controller_handler(struct co
 
     if (up_threshold_check != controller->up.last_crossed && up_threshold_check == SHORT && !controller->is_cont_adj)
     {
-        ret.action = START_CONT_INC_COLOR_CHANNEL;
+        ret.action = START_CONT_INC_CHANNEL_VALUE;
         ret.trigger = TT_UP_BUTTON;
         controller->up.last_crossed = up_threshold_check;
         controller->is_cont_adj = true;
@@ -170,7 +171,7 @@ struct threshold_action_and_trigger threshold_event_controller_handler(struct co
     }
     else if (down_threshold_check != controller->down.last_crossed && down_threshold_check == SHORT && !controller->is_cont_adj)
     {
-        ret.action = START_CONT_DEC_COLOR_CHANNEL;
+        ret.action = START_CONT_DEC_CHANNEL_VALUE;
         ret.trigger = TT_DOWN_BUTTON;
         controller->down.last_crossed = down_threshold_check;
         controller->is_cont_adj = true;
@@ -213,4 +214,70 @@ struct threshold_action_and_trigger threshold_event_controller_handler(struct co
         }
     }
     return ret;
+}
+
+char *threshold_to_string(threshold thresh) {
+    switch (thresh) {
+        case NONE:
+            return "NONE";
+        case SHORT:
+            return "SHORT";
+        case MEDIUM:
+            return "MEDIUM";
+        case LONG:
+            return "LONG";
+    }
+}
+
+char *game_action_to_string(game_action action) {
+    switch (action) {
+        case INCREMENT_CHANNEL_VALUE:
+            return "INCREMENT_CHANNEL_VALUE";
+        case DECREMENT_CHANNEL_VALUE:
+            return "DECREMENT_CHANNEL_VALUE";
+        case START_CONT_INC_CHANNEL_VALUE:
+            return "START_CONT_INC_CHANNEL_VALUE";
+        case STOP_CONT_INC_CHANNEL_VALUE:
+            return "STOP_CONT_INC_CHANNEL_VALUE";
+        case START_CONT_DEC_CHANNEL_VALUE:
+            return "START_CONT_DEC_CHANNEL_VALUE";
+        case STOP_CONT_DEC_CHANNEL_VALUE:
+            return "STOP_CONT_DEC_CHANNEL_VALUE";
+        case NEXT_COLOR_CHANNEL:
+            return "NEXT_COLOR_CHANNEL";
+        case CONFIRM_GUESS:
+            return "CONFIRM_GUESS";
+        case START_NEW_GAME:
+            return "START_NEW_GAME";
+        case INDICATE_HOLD_THRESHOLD_PASSED:
+            return "INDICATE_HOLD_THRESHOLD_PASSED";
+        case NO_OP:
+            return "NO_OP";
+        default:
+            return "UNDEFINED GAME ACTION";
+    }
+}
+
+static void button_to_string(const struct button *button, char *out, size_t out_len)
+{
+    if (button->is_pressed)
+    {
+        snprintf(out, out_len, "pressed@%llums last=%s",
+                 (unsigned long long)(button->time_press / 1000), threshold_to_string(button->last_crossed));
+    }
+    else
+    {
+        snprintf(out, out_len, "released last=%s", threshold_to_string(button->last_crossed));
+    }
+}
+
+char *controller_to_string(struct controller_state *controller)
+{
+    static char buf[128];
+    char up[48];
+    char down[48];
+    button_to_string(&controller->up, up, sizeof up);
+    button_to_string(&controller->down, down, sizeof down);
+    snprintf(buf, sizeof buf, "up{%s} down{%s} cont_adj=%d", up, down, controller->is_cont_adj);
+    return buf;
 }

@@ -9,6 +9,7 @@
 #include "Color.h"
 #include "queue.h"
 #include "Controller.h"
+#include <string.h>
 
 static QueueHandle_t but_event_queue;
 static QueueHandle_t but_irq_queue;
@@ -161,11 +162,11 @@ void button_controller_task(void *pvParameters)
 
     while (1)
     {
-        BaseType_t ret = xQueueReceive(but_event_queue, &but_event_buf, ticks_until_next_threshold);
+        BaseType_t queue_receive = xQueueReceive(but_event_queue, &but_event_buf, ticks_until_next_threshold);
         absolute_time_t event_time = get_absolute_time();
 
         // update the state
-        if (ret == pdPASS)
+        if (queue_receive == pdPASS)
         {
             next_action = button_event_controller_handler(&controller, &but_event_buf);
         }
@@ -182,28 +183,47 @@ void button_controller_task(void *pvParameters)
         switch (next_action)
         {
         case NO_OP:
-            printf("CONTROLLER EVENT DETECTED BUT NO OPERATION TO DO\n");
+            // printf("CONTROLLER EVENT DETECTED BUT NO OPERATION TO DO\n");
+            // char* event_trigger = "unknown";
+            // if (queue_receive == errQUEUE_EMPTY) {
+            //     switch (threshold_trigger) {
+            //         case TT_DOWN_BUTTON:
+            //             event_trigger = strcat("down button crossed ", strcat(threshold_to_string(controller.down.last_crossed), " threshold\n"));
+            //             break;
+            //         case TT_UP_BUTTON:
+            //             event_trigger = strcat("up button crossed ", strcat(threshold_to_string(controller.up.last_crossed), " threshold\n"));
+            //             break;
+            //         case TT_MAX_DELAY:
+            //             event_trigger = "max delay detected";
+            //             break;
+            //         default:
+            //             break;
+            //     }
+            //     printf("\tthreshold event triggered by: %s\n", event_trigger);
+            // } else {
+            //     printf("button event triggered by %s button %s\n", but_event_buf.pin == UP_BUTTON_PIN ? "up" : "down", but_event_buf.is_pressed ? "press" : "release");
+            // }
             break;
-        case INCREMENT_COLOR_CHANNEL:
-            printf("EVENT DETECTED: INCREMENT COLOR CHANNEL\n");
+        case INCREMENT_CHANNEL_VALUE:
+            printf("INCREMENT CHANNEL VALUE\n");
             break;
-        case DECREMENT_COLOR_CHANNEL:
-            printf("EVENT DETECTED: DECREMENT COLOR CHANNEL\n");
+        case DECREMENT_CHANNEL_VALUE:
+            printf("DECREMENT CHANNEL VALUE\n");
             break;
-        case START_CONT_INC_COLOR_CHANNEL:
-            printf("START CONTINUOUSLY INCREASING COLOR CHANNEL\n");
+        case START_CONT_INC_CHANNEL_VALUE:
+            printf("START CONTINUOUSLY INCREASING CHANNEL VALUE\n");
             break;
-        case STOP_CONT_INC_COLOR_CHANNEL:
-            printf("STOP CONTINUOUSLY INCREASING COLOR CHANNEL\n");
+        case STOP_CONT_INC_CHANNEL_VALUE:
+            printf("STOP CONTINUOUSLY INCREASING CHANNEL VALUE\n");
             break;
-        case START_CONT_DEC_COLOR_CHANNEL:
-            printf("START CONTINUOUSLY DECREASING COLOR CHANNEL\n");
+        case START_CONT_DEC_CHANNEL_VALUE:
+            printf("START CONTINUOUSLY DECREASING CHANNEL VALUE\n");
             break;
-        case STOP_CONT_DEC_COLOR_CHANNEL:
-            printf("STOP CONTINUOUSLY DECREASING COLOR CHANNEL\n");
+        case STOP_CONT_DEC_CHANNEL_VALUE:
+            printf("STOP CONTINUOUSLY DECREASING CHANNEL VALUE\n");
             break;
-        case SWTICH_COLOR_CHANNEL:
-            printf("SWITCH COLOR CHANNEL\n");
+        case NEXT_COLOR_CHANNEL:
+            printf("NEXT COLOR CHANNEL\n");
             break;
         case CONFIRM_GUESS:
             printf("CONFIRM GUESS\n");
@@ -212,7 +232,7 @@ void button_controller_task(void *pvParameters)
             printf("START NEW GAME\n");
             break;
         case INDICATE_HOLD_THRESHOLD_PASSED:
-            char* trigger_display;
+            const char* trigger_display;
             float duration_display;
 
             if (threshold_trigger == TT_UP_BUTTON) {
@@ -225,11 +245,28 @@ void button_controller_task(void *pvParameters)
                 printf("Something strange happened\n");
                 break;
             }
-            printf("HOLD THRESHOLD PASSED: %s button held: %.3f\n", trigger_display, duration_display);
+            printf("HOLD THRESHOLD PASSED: %s button held: %.3f\n", trigger_display, duration_display *0.000001);
             break;
         default:
-            printf("UNEXEPECTED NEXT ACTION: %d\n", next_action);
+            printf("UNEXEPECTED NEXT ACTION: %s\n", game_action_to_string(next_action));
             break;
+        }
+
+        // Diagnostics: what woke the task and the controller state after handling it.
+        // NO_OP threshold wakes are skipped since the task can wake many times just before a threshold.
+        if (queue_receive == pdPASS)
+        {
+            printf("\t%s %s @ %llums -> %s\n",
+                   but_event_buf.pin == UP_BUTTON_PIN ? "up" : "down",
+                   but_event_buf.is_pressed ? "press" : "release",
+                   (unsigned long long)(but_event_buf.time_changed / 1000),
+                   controller_to_string(&controller));
+        }
+        else if (next_action != NO_OP)
+        {
+            printf("\tthreshold wake @ %llums -> %s\n",
+                   (unsigned long long)(event_time / 1000),
+                   controller_to_string(&controller));
         }
     }
 }

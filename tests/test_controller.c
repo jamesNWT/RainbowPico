@@ -3,6 +3,7 @@
  * CHECK_* macros record failures, and main() runs everything and prints a summary.
 */
 #include <stdio.h>
+#include <string.h>
 #include "Controller.h"
 
 /////////////////////
@@ -17,13 +18,13 @@ static const char *action_name(game_action a)
 {
     switch (a)
     {
-    case INCREMENT_COLOR_CHANNEL: return "INCREMENT_COLOR_CHANNEL";
-    case DECREMENT_COLOR_CHANNEL: return "DECREMENT_COLOR_CHANNEL";
-    case START_CONT_INC_COLOR_CHANNEL: return "START_CONT_INC_COLOR_CHANNEL";
-    case STOP_CONT_INC_COLOR_CHANNEL: return "STOP_CONT_INC_COLOR_CHANNEL";
-    case START_CONT_DEC_COLOR_CHANNEL: return "START_CONT_DEC_COLOR_CHANNEL";
-    case STOP_CONT_DEC_COLOR_CHANNEL: return "STOP_CONT_DEC_COLOR_CHANNEL";
-    case SWTICH_COLOR_CHANNEL: return "SWTICH_COLOR_CHANNEL";
+    case INCREMENT_CHANNEL_VALUE: return "INCREMENT_CHANNEL_VALUE";
+    case DECREMENT_CHANNEL_VALUE: return "DECREMENT_CHANNEL_VALUE";
+    case START_CONT_INC_CHANNEL_VALUE: return "START_CONT_INC_CHANNEL_VALUE";
+    case STOP_CONT_INC_CHANNEL_VALUE: return "STOP_CONT_INC_CHANNEL_VALUE";
+    case START_CONT_DEC_CHANNEL_VALUE: return "START_CONT_DEC_CHANNEL_VALUE";
+    case STOP_CONT_DEC_CHANNEL_VALUE: return "STOP_CONT_DEC_CHANNEL_VALUE";
+    case NEXT_COLOR_CHANNEL: return "NEXT_COLOR_CHANNEL";
     case CONFIRM_GUESS: return "CONFIRM_GUESS";
     case START_NEW_GAME: return "START_NEW_GAME";
     case INDICATE_HOLD_THRESHOLD_PASSED: return "INDICATE_HOLD_THRESHOLD_PASSED";
@@ -70,6 +71,11 @@ static const char *trigger_name(enum threshold_trigger t)
 #define CHECK_U64(expected, actual) do { \
         uint64_t e_ = (expected), a_ = (actual); \
         if (e_ != a_) { FAIL_LINE(); printf("%s: expected %llu, got %llu\n", #actual, (unsigned long long)e_, (unsigned long long)a_); checks_failed++; } \
+    } while (0)
+
+#define CHECK_STR(expected, actual) do { \
+        const char *e_ = (expected), *a_ = (actual); \
+        if (strcmp(e_, a_) != 0) { FAIL_LINE(); printf("%s:\n      expected \"%s\"\n      got      \"%s\"\n", #actual, e_, a_); checks_failed++; } \
     } while (0)
 
 #define CHECK_TRUE(cond) do { \
@@ -283,13 +289,23 @@ static void test_time_until_next_threshold_takes_earliest_button(void)
 
 static void test_double_release_action_uses_the_shorter_hold(void)
 {
-    CHECK_ACTION(SWTICH_COLOR_CHANNEL, get_game_action_from_double_press_release(NONE, NONE));
-    CHECK_ACTION(SWTICH_COLOR_CHANNEL, get_game_action_from_double_press_release(SHORT, NONE));
-    CHECK_ACTION(SWTICH_COLOR_CHANNEL, get_game_action_from_double_press_release(NONE, MEDIUM));
+    CHECK_ACTION(NEXT_COLOR_CHANNEL, get_game_action_from_double_press_release(NONE, NONE));
+    CHECK_ACTION(NEXT_COLOR_CHANNEL, get_game_action_from_double_press_release(SHORT, NONE));
+    CHECK_ACTION(NEXT_COLOR_CHANNEL, get_game_action_from_double_press_release(NONE, MEDIUM));
     CHECK_ACTION(CONFIRM_GUESS, get_game_action_from_double_press_release(SHORT, SHORT));
     CHECK_ACTION(CONFIRM_GUESS, get_game_action_from_double_press_release(MEDIUM, SHORT));
     CHECK_ACTION(START_NEW_GAME, get_game_action_from_double_press_release(MEDIUM, MEDIUM));
     CHECK_ACTION(START_NEW_GAME, get_game_action_from_double_press_release(LONG, MEDIUM));
+}
+
+static void test_controller_to_string(void)
+{
+    struct sim s;
+    sim_init(&s);
+    CHECK_STR("up{released last=NONE} down{released last=NONE} cont_adj=0", controller_to_string(&s.c));
+
+    press(&s, UP, 0); // T0 is 10 s after boot
+    CHECK_STR("up{pressed@10000ms last=NONE} down{released last=NONE} cont_adj=0", controller_to_string(&s.c));
 }
 
 ////////////////////////////////////
@@ -300,7 +316,7 @@ static void test_up_click_increments(void)
 {
     struct sim s;
     sim_init(&s);
-    CHECK_ACTION(INCREMENT_COLOR_CHANNEL, press(&s, UP, 0));
+    CHECK_ACTION(INCREMENT_CHANNEL_VALUE, press(&s, UP, 0));
     CHECK_ACTION(NO_OP, release(&s, UP, 100));
     CHECK_LOG_EMPTY(&s);
 }
@@ -309,7 +325,7 @@ static void test_down_click_decrements(void)
 {
     struct sim s;
     sim_init(&s);
-    CHECK_ACTION(DECREMENT_COLOR_CHANNEL, press(&s, DOWN, 0));
+    CHECK_ACTION(DECREMENT_CHANNEL_VALUE, press(&s, DOWN, 0));
     CHECK_ACTION(NO_OP, release(&s, DOWN, 100));
     CHECK_LOG_EMPTY(&s);
 }
@@ -318,11 +334,11 @@ static void test_up_hold_starts_and_stops_continuous_increment(void)
 {
     struct sim s;
     sim_init(&s);
-    CHECK_ACTION(INCREMENT_COLOR_CHANNEL, press(&s, UP, 0));
+    CHECK_ACTION(INCREMENT_CHANNEL_VALUE, press(&s, UP, 0));
     sim_idle_until(&s, 800);
     CHECK_LOGGED_TRIGGER(&s, 0, TT_UP_BUTTON);
-    CHECK_LOG(&s, START_CONT_INC_COLOR_CHANNEL);
-    CHECK_ACTION(STOP_CONT_INC_COLOR_CHANNEL, release(&s, UP, 800));
+    CHECK_LOG(&s, START_CONT_INC_CHANNEL_VALUE);
+    CHECK_ACTION(STOP_CONT_INC_CHANNEL_VALUE, release(&s, UP, 800));
     CHECK_TRUE(!s.c.is_cont_adj);
 }
 
@@ -330,11 +346,11 @@ static void test_down_hold_starts_and_stops_continuous_decrement(void)
 {
     struct sim s;
     sim_init(&s);
-    CHECK_ACTION(DECREMENT_COLOR_CHANNEL, press(&s, DOWN, 0));
+    CHECK_ACTION(DECREMENT_CHANNEL_VALUE, press(&s, DOWN, 0));
     sim_idle_until(&s, 800);
     CHECK_LOGGED_TRIGGER(&s, 0, TT_DOWN_BUTTON);
-    CHECK_LOG(&s, START_CONT_DEC_COLOR_CHANNEL);
-    CHECK_ACTION(STOP_CONT_DEC_COLOR_CHANNEL, release(&s, DOWN, 800));
+    CHECK_LOG(&s, START_CONT_DEC_CHANNEL_VALUE);
+    CHECK_ACTION(STOP_CONT_DEC_CHANNEL_VALUE, release(&s, DOWN, 800));
     CHECK_TRUE(!s.c.is_cont_adj);
 }
 
@@ -350,7 +366,7 @@ static void test_wake_just_before_threshold_does_nothing(void)
     CHECK_TRUE(!s.c.is_cont_adj);
 
     struct threshold_action_and_trigger on_time = threshold_event_controller_handler(&s.c, AT_MS(501));
-    CHECK_ACTION(START_CONT_INC_COLOR_CHANNEL, on_time.action);
+    CHECK_ACTION(START_CONT_INC_CHANNEL_VALUE, on_time.action);
 }
 
 static void test_continuous_adjust_starts_only_once_per_hold(void)
@@ -359,8 +375,8 @@ static void test_continuous_adjust_starts_only_once_per_hold(void)
     sim_init(&s);
     press(&s, UP, 0);
     sim_idle_until(&s, 4000); // past every threshold
-    CHECK_LOG(&s, START_CONT_INC_COLOR_CHANNEL);
-    CHECK_ACTION(STOP_CONT_INC_COLOR_CHANNEL, release(&s, UP, 4000));
+    CHECK_LOG(&s, START_CONT_INC_CHANNEL_VALUE);
+    CHECK_ACTION(STOP_CONT_INC_CHANNEL_VALUE, release(&s, UP, 4000));
 }
 
 static void test_second_hold_starts_continuous_adjust_again(void)
@@ -369,12 +385,12 @@ static void test_second_hold_starts_continuous_adjust_again(void)
     sim_init(&s);
     press(&s, UP, 0);
     release(&s, UP, 800);
-    CHECK_LOG(&s, START_CONT_INC_COLOR_CHANNEL);
+    CHECK_LOG(&s, START_CONT_INC_CHANNEL_VALUE);
 
-    CHECK_ACTION(INCREMENT_COLOR_CHANNEL, press(&s, UP, 1000));
+    CHECK_ACTION(INCREMENT_CHANNEL_VALUE, press(&s, UP, 1000));
     sim_idle_until(&s, 1800);
-    CHECK_LOG(&s, START_CONT_INC_COLOR_CHANNEL);
-    CHECK_ACTION(STOP_CONT_INC_COLOR_CHANNEL, release(&s, UP, 1800));
+    CHECK_LOG(&s, START_CONT_INC_CHANNEL_VALUE);
+    CHECK_ACTION(STOP_CONT_INC_CHANNEL_VALUE, release(&s, UP, 1800));
 }
 
 static void test_continuous_adjust_ignores_the_other_button(void)
@@ -383,7 +399,7 @@ static void test_continuous_adjust_ignores_the_other_button(void)
     sim_init(&s);
     press(&s, UP, 0);
     sim_idle_until(&s, 800);
-    CHECK_LOG(&s, START_CONT_INC_COLOR_CHANNEL);
+    CHECK_LOG(&s, START_CONT_INC_CHANNEL_VALUE);
 
     CHECK_ACTION(NO_OP, press(&s, DOWN, 900));
     sim_idle_until(&s, 2000); // down held past its own thresholds
@@ -391,7 +407,7 @@ static void test_continuous_adjust_ignores_the_other_button(void)
     CHECK_ACTION(NO_OP, release(&s, DOWN, 2000));
     CHECK_TRUE(s.c.is_cont_adj);
 
-    CHECK_ACTION(STOP_CONT_INC_COLOR_CHANNEL, release(&s, UP, 2100));
+    CHECK_ACTION(STOP_CONT_INC_CHANNEL_VALUE, release(&s, UP, 2100));
 }
 
 ////////////////////////////////////
@@ -402,21 +418,21 @@ static void test_pressing_second_button_does_nothing_by_itself(void)
 {
     struct sim s;
     sim_init(&s);
-    CHECK_ACTION(INCREMENT_COLOR_CHANNEL, press(&s, UP, 0));
+    CHECK_ACTION(INCREMENT_CHANNEL_VALUE, press(&s, UP, 0));
     CHECK_ACTION(NO_OP, press(&s, DOWN, 100));
 
     sim_init(&s);
-    CHECK_ACTION(DECREMENT_COLOR_CHANNEL, press(&s, DOWN, 0));
+    CHECK_ACTION(DECREMENT_CHANNEL_VALUE, press(&s, DOWN, 0));
     CHECK_ACTION(NO_OP, press(&s, UP, 100));
 }
 
-static void test_double_click_switches_channel(void)
+static void test_double_click_moves_to_next_channel(void)
 {
     struct sim s;
     sim_init(&s);
     press(&s, UP, 0);
     press(&s, DOWN, 100);
-    CHECK_ACTION(SWTICH_COLOR_CHANNEL, release(&s, UP, 300));
+    CHECK_ACTION(NEXT_COLOR_CHANNEL, release(&s, UP, 300));
     CHECK_LOG_EMPTY(&s);
     CHECK_ACTION(NO_OP, release(&s, DOWN, 350));
 }
@@ -464,7 +480,7 @@ static void test_double_release_judges_by_the_trailing_button(void)
     press(&s, DOWN, 400);
     sim_idle_until(&s, 700); // up has passed 500ms, but down has only been held 300ms
     CHECK_LOG_EMPTY(&s);
-    CHECK_ACTION(SWTICH_COLOR_CHANNEL, release(&s, UP, 700));
+    CHECK_ACTION(NEXT_COLOR_CHANNEL, release(&s, UP, 700));
 }
 
 // After a two-button gesture resolves, ignore everything until both buttons are up again.
@@ -474,7 +490,7 @@ static void test_inputs_ignored_after_double_release_until_both_up(void)
     sim_init(&s);
     press(&s, UP, 0);
     press(&s, DOWN, 100);
-    CHECK_ACTION(SWTICH_COLOR_CHANNEL, release(&s, DOWN, 200));
+    CHECK_ACTION(NEXT_COLOR_CHANNEL, release(&s, DOWN, 200));
 
     sim_idle_until(&s, 2000); // up still held well past the continuous adjust threshold
     CHECK_LOG_EMPTY(&s);
@@ -483,7 +499,7 @@ static void test_inputs_ignored_after_double_release_until_both_up(void)
     CHECK_ACTION(NO_OP, release(&s, UP, 2300));
 
     // back in the base state: buttons behave normally again
-    CHECK_ACTION(INCREMENT_COLOR_CHANNEL, press(&s, UP, 3000));
+    CHECK_ACTION(INCREMENT_CHANNEL_VALUE, press(&s, UP, 3000));
     CHECK_ACTION(NO_OP, release(&s, UP, 3100));
     CHECK_LOG_EMPTY(&s);
 }
@@ -495,6 +511,7 @@ int main(void)
     RUN_TEST(test_time_until_next_threshold_for_one_button);
     RUN_TEST(test_time_until_next_threshold_takes_earliest_button);
     RUN_TEST(test_double_release_action_uses_the_shorter_hold);
+    RUN_TEST(test_controller_to_string);
 
     printf("-- single button gestures\n");
     RUN_TEST(test_up_click_increments);
@@ -508,7 +525,7 @@ int main(void)
 
     printf("-- double button gestures\n");
     RUN_TEST(test_pressing_second_button_does_nothing_by_itself);
-    RUN_TEST(test_double_click_switches_channel);
+    RUN_TEST(test_double_click_moves_to_next_channel);
     RUN_TEST(test_double_hold_pulses_for_trailing_button_only);
     RUN_TEST(test_double_hold_past_first_threshold_confirms_guess);
     RUN_TEST(test_double_hold_past_second_threshold_starts_new_game);

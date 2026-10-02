@@ -50,13 +50,13 @@ struct controller_state
 
 typedef enum
 {
-    INCREMENT_COLOR_CHANNEL,
-    DECREMENT_COLOR_CHANNEL,
-    START_CONT_INC_COLOR_CHANNEL,
-    STOP_CONT_INC_COLOR_CHANNEL,
-    START_CONT_DEC_COLOR_CHANNEL,
-    STOP_CONT_DEC_COLOR_CHANNEL,
-    SWTICH_COLOR_CHANNEL,
+    INCREMENT_CHANNEL_VALUE,
+    DECREMENT_CHANNEL_VALUE,
+    START_CONT_INC_CHANNEL_VALUE,
+    STOP_CONT_INC_CHANNEL_VALUE,
+    START_CONT_DEC_CHANNEL_VALUE,
+    STOP_CONT_DEC_CHANNEL_VALUE,
+    NEXT_COLOR_CHANNEL,
     CONFIRM_GUESS,
     START_NEW_GAME,
     INDICATE_HOLD_THRESHOLD_PASSED,
@@ -92,5 +92,10 @@ game_action get_game_action_from_double_press_release(threshold last_crossed_1, 
 game_action button_event_controller_handler(struct controller_state *controller, struct button_event *but_event);
 
 struct threshold_action_and_trigger threshold_event_controller_handler(struct controller_state *controller, uint64_t event_time);
+
+char *threshold_to_string(threshold thresh);
+char *game_action_to_string(game_action action);
+// Returns a static buffer that the next call overwrites, so only call it from one task.
+char *controller_to_string(struct controller_state *controller);
 
 #endif
