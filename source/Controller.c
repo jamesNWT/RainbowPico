@@ -108,8 +108,6 @@ game_action get_game_action_from_double_press_release(threshold last_crossed_1, 
 game_action button_event_controller_handler(struct controller_state *controller, struct button_event *but_event)
 {
     game_action ret = NO_OP;
-    bool is_release_event = false;
-    const uint64_t double_press_detection_ceiling_us = 100;
     switch (but_event->pin) {
         case UP_BUTTON_PIN:
             if (but_event->is_pressed) { // PRESS EVENT
@@ -178,7 +176,8 @@ struct threshold_action_and_trigger threshold_event_controller_handler(struct co
         controller->is_cont_adj = true;
         return ret;
     }
-    else if (down_threshold_check != controller->down.last_crossed || up_threshold_check != controller->down.last_crossed && !controller->is_cont_adj)
+    
+    if ((down_threshold_check != controller->down.last_crossed || up_threshold_check != controller->down.last_crossed) && !controller->is_cont_adj)
     {
         // only indicate threshold passed if both buttons are held down, and we're not in continuous adjustment mode
         if (controller->down.is_pressed && controller->up.is_pressed)
@@ -213,4 +212,5 @@ struct threshold_action_and_trigger threshold_event_controller_handler(struct co
             ret.trigger = TT_MAX_DELAY;
         }
     }
+    return ret;
 }
