@@ -74,6 +74,17 @@ into domains of:
 ### Yet better button polling
 - We now have more precise button polling by implementing the poll as an ISR.
 
+### Controller state machine
+- I only have two buttons in my PICO kit, so the device has to be controller by these two buttons.
+- Because I have many more ways I need to change the device state than I have buttons, I have to code button gestures, like double press and timed presses to get more control.
+- This requires tracking the controller state and updating based on button events coming in from the ISR handler, and the previous state. I'm having quite a challenge implementing this.
+  - I had to use claude to write unit tests for the functions related to this state machine as relying on intuition and printf diagnostics was not proving robust enough.
+  - I also have to write more detailed printf diagnostics to debug the state.
+  - BUGS ENCOUNTERED:
+    - weird UNEXPECTED NEXT ACTIONS happening randomly after long hold release of single button, while a button is held
+    - hold_threshold passed events are quadruple firing 
+    - it appears I'm not properly updating last threshold crossed for buttons.
+
 ## Current goal
 
 Change the device from simply displaying a light into a hue-matching color game.
