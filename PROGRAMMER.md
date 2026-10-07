@@ -82,8 +82,10 @@ into domains of:
   - I also have to write more detailed printf diagnostics to debug the state.
   - BUGS ENCOUNTERED:
     - weird UNEXPECTED NEXT ACTIONS happening randomly after long hold release of single button, while a button is held
+      - This means I'm somehow getting return values from either threshold_event_controller_handler or button_event_controller_handler that are not in the game_actions enum
     - hold_threshold passed events are quadruple firing 
     - it appears I'm not properly updating last threshold crossed for buttons.
+    - I have no way of differentiating the first button press of a double press from a single press
 
 ## Current goal
 

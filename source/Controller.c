@@ -160,7 +160,7 @@ struct threshold_action_and_trigger threshold_event_controller_handler(struct co
     threshold down_threshold_check = get_last_threshold_crossed(button_duration_down);
 
     struct threshold_action_and_trigger ret;
-
+    // TODO: something is wrong with last_threshold_crossed logic.
     if (up_threshold_check != controller->up.last_crossed && up_threshold_check == SHORT && !controller->is_cont_adj)
     {
         ret.action = START_CONT_INC_CHANNEL_VALUE;

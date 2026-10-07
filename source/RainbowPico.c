@@ -112,27 +112,27 @@ void deferred_button_interupt_handler(void *pvParameters)
 {
     struct but_irq irq;
 
-    bool last_up_state = HIGH, last_down_state = HIGH;
+    bool last_stable_up_but_state = HIGH, last_stabel_down_but_state = HIGH;
 
     while (1)
     {
         xQueueReceive(but_irq_queue, &irq, portMAX_DELAY);
         vTaskDelay(pdMS_TO_TICKS(DEBOUNCE_DELAY_MS));
-        bool check_again = gpio_get(irq.pin);
+        bool debounced_reading = gpio_get(irq.pin);
 
         gpio_set_irq_enabled(irq.pin, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true); // re-enable irqs after debounce delay
 
-        if ((irq.pin == UP_BUTTON_PIN && check_again != last_up_state) || (irq.pin == DOWN_BUTTON_PIN && check_again != last_down_state))
+        if ((irq.pin == UP_BUTTON_PIN && debounced_reading != last_stable_up_but_state) || (irq.pin == DOWN_BUTTON_PIN && debounced_reading != last_stabel_down_but_state))
         {
-            struct button_event button = {.pin = irq.pin, .is_pressed = (check_again == LOW ? true : false), .time_changed = irq.time};
+            struct button_event button = {.pin = irq.pin, .is_pressed = (debounced_reading == LOW ? true : false), .time_changed = irq.time};
             xQueueSend(but_event_queue, &button, 0);
             if (irq.pin == UP_BUTTON_PIN)
             {
-                last_up_state = check_again;
+                last_stable_up_but_state = debounced_reading;
             }
             else
             {
-                last_down_state = check_again;
+                last_stabel_down_but_state = debounced_reading;
             }
         }
     }
