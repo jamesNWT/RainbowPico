@@ -12,9 +12,9 @@
 #include <stdint.h>
 #include "Pins.h"
 
-#define SHORT_HOLD_CEILING_US (500 * 1000)
-#define MEDIUM_HOLD_CEILING_US (1000 * 1000)
-#define LONG_HOLD_FLOOR_US (2500 * 1000)
+#define CLICK_CEILING_US (200 * 1000)
+#define SHORT_HOLD_CEILING_US (1000 * 1000)
+#define LONG_HOLD_FLOOR_US = SHORT_HOLD_CEILING_US // pedantic but maybe helpful for reasoning.
 
 // Used both as "button is not pressed" for a duration/press time and "no deadline" for a wait.
 #define ABSOLUTE_TIME_MAX UINT64_MAX
@@ -26,33 +26,27 @@ struct button_event
     uint64_t time_changed;
 };
 
-typedef enum
-{
-    NONE = 0,
-    SHORT = 1,
-    MEDIUM = 2,
-    LONG = 3
-} threshold;
-
 struct button {
     bool is_pressed;
-    threshold last_crossed;
     uint64_t time_press;
 };
+
+typedef enum
+{
+    CONTROLLER_IDLE,
+    CONTROLLER_SINGLE_CLICK,
+    CONTROLLER_SINGLE_CONT_ADJ,
+    CONTROLLER_TWO_CLICK, // Two as in two buttons pressed, as opposed to calling it "double click"
+    CONTROLLER_TWO_SHORT_HOLD,
+    CONTROLLER_TWO_LONG_HOLD,
+    CONTROLLER_LOCKOUT
+} controller_state;
 
 struct controller
 {
     struct button up;
     struct button down;
-    enum {
-        IDLE,
-        SINGLE_CLICK,
-        SINGLE_CONT_ADJ,
-        DOUBLE_CLICK,
-        DOUBLE_SHORT,
-        DOUBLE_LONG,
-        LOCKOUT
-    } state;
+    controller_state state;
 };
 
 typedef enum
@@ -70,39 +64,19 @@ typedef enum
     NO_OP
 } game_action;
 
-enum threshold_trigger
+typedef enum
 {
-    TT_UP_BUTTON,
-    TT_DOWN_BUTTON,
-    TT_MAX_DELAY
-};
-
-struct threshold_action_and_trigger {
-    game_action action;
-    enum threshold_trigger trigger;
-};
+    EV_UP_PRESSED,
+    EV_UP_RELEASED,
+    EV_DOWN_PRESSED,
+    EV_DOWN_RELEASED,
+    EV_DEADLINE
+} controller_event;
 
 void controller_init(struct controller *controller);
 
-threshold get_last_threshold_crossed(uint64_t dur_us);
-
-// Returns ABSOLUTE_TIME_MAX when there is no further threshold to wait for.
-uint64_t get_us_until_next_threshold(uint64_t dur_us);
-
-// Earliest threshold deadline across both buttons, or ABSOLUTE_TIME_MAX if there is none.
-uint64_t controller_us_until_next_threshold(const struct controller *controller, uint64_t now);
-
 void update_controller_button_state(struct button *button, struct button_event *event);
 
-game_action get_game_action_from_double_press_release(threshold last_crossed_1, threshold last_crossed_2);
-
-game_action button_event_controller_handler(struct controller *controller, struct button_event *but_event);
-
-struct threshold_action_and_trigger threshold_event_controller_handler(struct controller *controller, uint64_t event_time);
-
-char *threshold_to_string(threshold thresh);
-char *game_action_to_string(game_action action);
-// Returns a static buffer that the next call overwrites, so only call it from one task.
-char *controller_to_string(struct controller *controller);
+uint64_t controller_next_deadline(const struct controller *controller);
 
 #endif

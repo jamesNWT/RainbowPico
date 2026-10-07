@@ -10,6 +10,7 @@
 #include "queue.h"
 #include "Controller.h"
 #include <string.h>
+#include "Diagnostics.h"
 
 static QueueHandle_t but_event_queue;
 static QueueHandle_t but_irq_queue;
@@ -156,101 +157,45 @@ void button_controller_task(void *pvParameters)
 
     game_action next_action = NO_OP;
 
-    TickType_t ticks_until_next_threshold = portMAX_DELAY;
+    TickType_t ticks_until_next_deadline = portMAX_DELAY;
 
-    enum threshold_trigger threshold_trigger = TT_MAX_DELAY;
+    controller_event event_type = EV_DEADLINE;
 
     while (1)
     {
-        BaseType_t queue_receive = xQueueReceive(but_event_queue, &but_event_buf, ticks_until_next_threshold);
+        BaseType_t queue_receive = xQueueReceive(but_event_queue, &but_event_buf, ticks_until_next_deadline);
         absolute_time_t event_time = get_absolute_time();
 
         // update the state
-        if (queue_receive == pdPASS)
+        if (queue_receive == pdPASS) // this iteration is caused by a button event
         {
-            next_action = button_event_controller_handler(&controller, &but_event_buf);
-        }
-        else
-        {
-            struct threshold_action_and_trigger next_action_and_trigger = threshold_event_controller_handler(&controller, event_time);
-            next_action = next_action_and_trigger.action;
-            threshold_trigger = next_action_and_trigger.trigger;
-        }
 
-        ticks_until_next_threshold = us_to_ticks(controller_us_until_next_threshold(&controller, event_time));
-
-        // do the next action
-        switch (next_action)
-        {
-        case NO_OP:
-            // printf("CONTROLLER EVENT DETECTED BUT NO OPERATION TO DO\n");
-            // char* event_trigger = "unknown";
-            // if (queue_receive == errQUEUE_EMPTY) {
-            //     switch (threshold_trigger) {
-            //         case TT_DOWN_BUTTON:
-            //             event_trigger = strcat("down button crossed ", strcat(threshold_to_string(controller.down.last_crossed), " threshold\n"));
-            //             break;
-            //         case TT_UP_BUTTON:
-            //             event_trigger = strcat("up button crossed ", strcat(threshold_to_string(controller.up.last_crossed), " threshold\n"));
-            //             break;
-            //         case TT_MAX_DELAY:
-            //             event_trigger = "max delay detected";
-            //             break;
-            //         default:
-            //             break;
-            //     }
-            //     printf("\tthreshold event triggered by: %s\n", event_trigger);
-            // } else {
-            //     printf("button event triggered by %s button %s\n", but_event_buf.pin == UP_BUTTON_PIN ? "up" : "down", but_event_buf.is_pressed ? "press" : "release");
-            // }
-            break;
-        case INCREMENT_CHANNEL_VALUE:
-            printf("INCREMENT CHANNEL VALUE\n");
-            break;
-        case DECREMENT_CHANNEL_VALUE:
-            printf("DECREMENT CHANNEL VALUE\n");
-            break;
-        case START_CONT_INC_CHANNEL_VALUE:
-            printf("START CONTINUOUSLY INCREASING CHANNEL VALUE\n");
-            break;
-        case STOP_CONT_INC_CHANNEL_VALUE:
-            printf("STOP CONTINUOUSLY INCREASING CHANNEL VALUE\n");
-            break;
-        case START_CONT_DEC_CHANNEL_VALUE:
-            printf("START CONTINUOUSLY DECREASING CHANNEL VALUE\n");
-            break;
-        case STOP_CONT_DEC_CHANNEL_VALUE:
-            printf("STOP CONTINUOUSLY DECREASING CHANNEL VALUE\n");
-            break;
-        case NEXT_COLOR_CHANNEL:
-            printf("NEXT COLOR CHANNEL\n");
-            break;
-        case CONFIRM_GUESS:
-            printf("CONFIRM GUESS\n");
-            break;
-        case START_NEW_GAME:
-            printf("START NEW GAME\n");
-            break;
-        case INDICATE_HOLD_THRESHOLD_PASSED:
-            const char* trigger_display;
-            float duration_display;
-
-            if (threshold_trigger == TT_UP_BUTTON) {
-                trigger_display = "up";
-                duration_display = get_absolute_time() - controller.up.time_press;
-            } else if (threshold_trigger == TT_DOWN_BUTTON) {
-                trigger_display = "down";
-                duration_display = get_absolute_time() - controller.down.time_press;
+            if (but_event_buf.pin == UP_BUTTON_PIN) {
+                if (but_event_buf.is_pressed) {
+                    event_type = EV_UP_PRESSED;
+                } else {
+                    event_type = EV_UP_RELEASED;
+                }
+            } else if (but_event_buf.pin == DOWN_BUTTON_PIN) {
+                if (but_event_buf.is_pressed) {
+                    event_type = EV_DOWN_PRESSED;
+                } else {
+                    event_type = EV_DOWN_RELEASED;
+                }
             } else {
-                printf("Something strange happened\n");
-                break;
+                printf("Error: Unexpected data from button event!\n");
             }
-            printf("HOLD THRESHOLD PASSED: %s button held: %.3f\n", trigger_display, duration_display *0.000001);
-            break;
-        default:
-            printf("UNEXEPECTED NEXT ACTION: %s\n", game_action_to_string(next_action));
-            break;
         }
+        else // this iteration was caused by a deadline (no item recieved from but_event_queue)
+        {
+            event_type = EV_DEADLINE;
+        }
+
+        // update the controller's state in software
+        update_controller(event_type, event_time, &controller);
+        // get the ticks until the next deadline
+        
+        ticks_until_next_deadline = absolute_time_diff_us(event_time, us_to_ticks(controller_next_deadline(&controller));
 
         // Diagnostics: what woke the task and the controller state after handling it.
         // NO_OP threshold wakes are skipped since the task can wake many times just before a threshold.
@@ -268,6 +213,7 @@ void button_controller_task(void *pvParameters)
                    (unsigned long long)(event_time / 1000),
                    controller_to_string(&controller));
         }
+        printf("NEXT ACTION DETECTED: %s\n", game_action_to_string(next_action));
     }
 }
 
