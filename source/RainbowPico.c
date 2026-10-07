@@ -151,7 +151,7 @@ void button_controller_task(void *pvParameters)
 {
     struct button_event but_event_buf;
 
-    struct controller_state controller;
+    struct controller controller;
     controller_init(&controller);
 
     game_action next_action = NO_OP;

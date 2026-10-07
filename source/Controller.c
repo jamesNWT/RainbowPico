@@ -1,9 +1,9 @@
 #include <stdio.h>
 #include "Controller.h"
 
-void controller_init(struct controller_state *controller)
+void controller_init(struct controller *controller)
 {
-    *controller = (struct controller_state){
+    *controller = (struct controller){
         .up = {
             .is_pressed = false,
             .time_press = 0,
@@ -59,7 +59,7 @@ uint64_t get_us_until_next_threshold(uint64_t dur_us)
     }
 }
 
-uint64_t controller_us_until_next_threshold(const struct controller_state *controller, uint64_t now)
+uint64_t controller_us_until_next_threshold(const struct controller *controller, uint64_t now)
 {
     // calculate the button hold durations, letting UINT64_MAX be the value for buttons that are not pressed.
     uint64_t up_dur = controller->up.is_pressed ? now - controller->up.time_press : UINT64_MAX;
@@ -106,7 +106,7 @@ game_action get_game_action_from_double_press_release(threshold last_crossed_1, 
     }
 }
 
-game_action button_event_controller_handler(struct controller_state *controller, struct button_event *but_event)
+game_action button_event_controller_handler(struct controller *controller, struct button_event *but_event)
 {
     game_action ret = NO_OP;
     switch (but_event->pin) {
@@ -150,7 +150,7 @@ game_action button_event_controller_handler(struct controller_state *controller,
     return ret;
 }
 
-struct threshold_action_and_trigger threshold_event_controller_handler(struct controller_state *controller, uint64_t event_time)
+struct threshold_action_and_trigger threshold_event_controller_handler(struct controller *controller, uint64_t event_time)
 {
 
     // calculate the button hold durations, letting UINT64_MAX be the value for buttons that are not pressed.
@@ -271,7 +271,7 @@ static void button_to_string(const struct button *button, char *out, size_t out_
     }
 }
 
-char *controller_to_string(struct controller_state *controller)
+char *controller_to_string(struct controller *controller)
 {
     static char buf[128];
     char up[48];

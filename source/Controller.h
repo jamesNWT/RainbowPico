@@ -40,12 +40,19 @@ struct button {
     uint64_t time_press;
 };
 
-struct controller_state
+struct controller
 {
     struct button up;
     struct button down;
-    bool is_cont_adj; // flag for state where a button is being held for continuous channel adjustment
-    // bool is_double_press;
+    enum {
+        IDLE,
+        SINGLE_CLICK,
+        SINGLE_CONT_ADJ,
+        DOUBLE_CLICK,
+        DOUBLE_SHORT,
+        DOUBLE_LONG,
+        LOCKOUT
+    } state;
 };
 
 typedef enum
@@ -75,7 +82,7 @@ struct threshold_action_and_trigger {
     enum threshold_trigger trigger;
 };
 
-void controller_init(struct controller_state *controller);
+void controller_init(struct controller *controller);
 
 threshold get_last_threshold_crossed(uint64_t dur_us);
 
@@ -83,19 +90,19 @@ threshold get_last_threshold_crossed(uint64_t dur_us);
 uint64_t get_us_until_next_threshold(uint64_t dur_us);
 
 // Earliest threshold deadline across both buttons, or ABSOLUTE_TIME_MAX if there is none.
-uint64_t controller_us_until_next_threshold(const struct controller_state *controller, uint64_t now);
+uint64_t controller_us_until_next_threshold(const struct controller *controller, uint64_t now);
 
 void update_controller_button_state(struct button *button, struct button_event *event);
 
 game_action get_game_action_from_double_press_release(threshold last_crossed_1, threshold last_crossed_2);
 
-game_action button_event_controller_handler(struct controller_state *controller, struct button_event *but_event);
+game_action button_event_controller_handler(struct controller *controller, struct button_event *but_event);
 
-struct threshold_action_and_trigger threshold_event_controller_handler(struct controller_state *controller, uint64_t event_time);
+struct threshold_action_and_trigger threshold_event_controller_handler(struct controller *controller, uint64_t event_time);
 
 char *threshold_to_string(threshold thresh);
 char *game_action_to_string(game_action action);
 // Returns a static buffer that the next call overwrites, so only call it from one task.
-char *controller_to_string(struct controller_state *controller);
+char *controller_to_string(struct controller *controller);
 
 #endif

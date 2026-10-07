@@ -118,7 +118,7 @@ struct logged_action
 
 struct sim
 {
-    struct controller_state c;
+    struct controller c;
     uint64_t now;
     int log_count;
     int log_dropped;
