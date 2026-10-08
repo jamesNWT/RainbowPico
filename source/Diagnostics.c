@@ -1,4 +1,5 @@
-#include "Controller.h";
+#include "Controller.h"
+#include <stdio.h>
 
 char *controller_state_to_string(controller_state state) {
     switch (state) {

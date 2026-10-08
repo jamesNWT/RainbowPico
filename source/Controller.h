@@ -14,7 +14,7 @@
 
 #define CLICK_CEILING_US (200 * 1000)
 #define SHORT_HOLD_CEILING_US (1000 * 1000)
-#define LONG_HOLD_FLOOR_US = SHORT_HOLD_CEILING_US // pedantic but maybe helpful for reasoning.
+#define LONG_HOLD_FLOOR_US SHORT_HOLD_CEILING_US // pedantic but maybe helpful for reasoning.
 
 // Used both as "button is not pressed" for a duration/press time and "no deadline" for a wait.
 #define ABSOLUTE_TIME_MAX UINT64_MAX
@@ -73,9 +73,16 @@ typedef enum
     EV_DEADLINE
 } controller_event;
 
+struct controller_input {
+    controller_event event_type;
+    uint64_t event_time;
+};
+
 void controller_init(struct controller *controller);
 
 void update_controller_button_state(struct button *button, struct button_event *event);
+
+game_action controller_handle(struct controller *controller, struct controller_input input);
 
 uint64_t controller_next_deadline(const struct controller *controller);
 

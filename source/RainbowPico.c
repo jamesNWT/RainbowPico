@@ -159,46 +159,47 @@ void button_controller_task(void *pvParameters)
 
     TickType_t ticks_until_next_deadline = portMAX_DELAY;
 
-    controller_event event_type = EV_DEADLINE;
+    struct controller_input input;
 
     while (1)
     {
         BaseType_t queue_receive = xQueueReceive(but_event_queue, &but_event_buf, ticks_until_next_deadline);
-        absolute_time_t event_time = get_absolute_time();
 
-        // update the state
+        // create the input event, and update the internal button states
         if (queue_receive == pdPASS) // this iteration is caused by a button event
         {
-
+            input.event_time = but_event_buf.time_changed;
             if (but_event_buf.pin == UP_BUTTON_PIN) {
+                    
                 if (but_event_buf.is_pressed) {
-                    event_type = EV_UP_PRESSED;
+                    input.event_type = EV_UP_PRESSED;
                 } else {
-                    event_type = EV_UP_RELEASED;
+                    input.event_type = EV_UP_RELEASED;
                 }
-            } else if (but_event_buf.pin == DOWN_BUTTON_PIN) {
-                if (but_event_buf.is_pressed) {
-                    event_type = EV_DOWN_PRESSED;
-                } else {
-                    event_type = EV_DOWN_RELEASED;
-                }
+                update_controller_button_state(&controller.up, &but_event_buf);
+
             } else {
-                printf("Error: Unexpected data from button event!\n");
+                if (but_event_buf.is_pressed) {
+                    input.event_type = EV_DOWN_PRESSED;
+                } else {
+                    input.event_type = EV_DOWN_RELEASED;
+                }
+                update_controller_button_state(&controller.down, &but_event_buf);
             }
         }
         else // this iteration was caused by a deadline (no item recieved from but_event_queue)
         {
-            event_type = EV_DEADLINE;
+            input.event_time = get_absolute_time();
+            input.event_type = EV_DEADLINE;
         }
 
-        // update the controller's state in software
-        update_controller(event_type, event_time, &controller);
-        // get the ticks until the next deadline
-        
-        ticks_until_next_deadline = absolute_time_diff_us(event_time, us_to_ticks(controller_next_deadline(&controller));
+        next_action = controller_handle(&controller, input);
+
+        ticks_until_next_deadline = absolute_time_diff_us(input.event_time, us_to_ticks(controller_next_deadline(&controller));
 
         // Diagnostics: what woke the task and the controller state after handling it.
         // NO_OP threshold wakes are skipped since the task can wake many times just before a threshold.
+        printf("NEXT ACTION DETECTED: %s\n", game_action_to_string(next_action));
         if (queue_receive == pdPASS)
         {
             printf("\t%s %s @ %llums -> %s\n",
@@ -210,10 +211,10 @@ void button_controller_task(void *pvParameters)
         else if (next_action != NO_OP)
         {
             printf("\tthreshold wake @ %llums -> %s\n",
-                   (unsigned long long)(event_time / 1000),
+                   (unsigned long long)(input.event_time / 1000),
                    controller_to_string(&controller));
         }
-        printf("NEXT ACTION DETECTED: %s\n", game_action_to_string(next_action));
+        
     }
 }
 
