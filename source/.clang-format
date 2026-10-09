@@ -1,0 +1,8 @@
+BasedOnStyle: LLVM
+
+# These are still LLVM defaults, but might be helpful to see explicitly
+IndentWidth: 2 
+UseTab: Never
+
+# Working on this project in vscode, 80 columns is a little conservative, lets do 120
+ColumnLimit: 120

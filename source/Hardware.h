@@ -1,4 +1,4 @@
-/* Contains hardware configuration and initialization definitions specific to 
+/* Contains hardware configuration and initialization definitions specific to
  * the RainbowPico project.
  *
  * PWM Slice documentation:
@@ -13,15 +13,15 @@
  * |   21 | play rgb led red      | 2B          |
  * +------+-----------------------+-------------+
  *
-*/
+ */
 
 #ifndef HARDWARE_H
 #define HARDWARE_H
 
-#include "pico/stdlib.h"
-#include "hardware/gpio.h"
 #include "FreeRTOS.h"
 #include "Pins.h"
+#include "hardware/gpio.h"
+#include "pico/stdlib.h"
 
 // Define HIGH and LOW for clarity
 #define HIGH 1
@@ -29,16 +29,16 @@
 
 // Structure to represent a single PWM-controlled LED
 struct led_pwm {
-    uint pin;
-    uint pwm_channel; // NOTE: pico-sdk encodes A as 0 and B as 1.
-    uint pwm_slice;
+  uint pin;
+  uint pwm_channel; // NOTE: pico-sdk encodes A as 0 and B as 1.
+  uint pwm_slice;
 };
 
 // Structure to represent an RGB LED with its associated pwm pins
 struct rgb_led {
-    struct led_pwm red;
-    struct led_pwm green;
-    struct led_pwm blue;
+  struct led_pwm red;
+  struct led_pwm green;
+  struct led_pwm blue;
 };
 
 struct rgb_led build_rgb_led(uint red_pin, uint green_pin, uint blue_pin);

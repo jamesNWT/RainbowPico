@@ -1,12 +1,12 @@
 /* Contains definitions for the control of hardware components for the
  * RainbowPico project.
-*/
+ */
 #ifndef COMPONENTCONTROL_H
 #define COMPONENTCONTROL_H
 
+#include "Color.h"
 #include "Hardware.h"
 #include "pico/time.h"
-#include "Color.h"
 
 void set_led_rgb_hue(struct rgb_led led, struct rgb_color color);
 

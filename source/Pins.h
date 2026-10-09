@@ -1,6 +1,6 @@
-/* GPIO pin assignments. Deliberately has no includes so host-side code (e.g. the
- * controller unit tests) can use the pin numbers without the Pico SDK.
-*/
+/* GPIO pin assignments. Deliberately has no includes so host-side code (e.g.
+ * the controller unit tests) can use the pin numbers without the Pico SDK.
+ */
 #ifndef PINS_H
 #define PINS_H
 
