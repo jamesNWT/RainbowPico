@@ -180,7 +180,7 @@ void button_controller_task(void *pvParameters)
 
         next_action = controller_handle(&controller, input);
 
-        ticks_until_next_deadline = absolute_time_diff_us(input.event_time, us_to_ticks(controller_next_deadline(&controller)));
+        ticks_until_next_deadline = us_to_ticks(absolute_time_diff_us(input.event_time, controller_next_deadline(&controller)));
 
         // Diagnostics: what woke the task and the controller state after handling it.
         // NO_OP threshold wakes are skipped since the task can wake many times just before a threshold.
