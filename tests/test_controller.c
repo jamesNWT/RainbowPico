@@ -149,16 +149,16 @@ static void print_input(struct controller_input in)
  * button that started the gesture, and the ms the deadline timer started at. */
 static struct controller controller_in(controller_state_kind state, unsigned held, button_index active, long timer_start_ms)
 {
-    struct controller c;
-    controller_init(&c);
-    c.state = state;
-    c.held = held;
-    c.active_button = active;
+    struct controller controller;
+    controller_init(&controller);
+    controller.state = state;
+    controller.held = held;
+    controller.active_button = active;
     if (timer_start_ms != NO_TIMER)
     {
-        c.timer_start = AT_MS(timer_start_ms);
+        controller.timer_start = AT_MS(timer_start_ms);
     }
-    return c;
+    return controller;
 }
 
 static struct controller_input press(button_index button, long at_ms)
@@ -184,21 +184,21 @@ static struct controller_input deadline(long at_ms)
 
 /* One cell of the state table: feed one input to a controller built with controller_in,
  * and check the action and the state it lands in. Returns the controller for extra checks. */
-static struct controller check_transition(int line, struct controller c, struct controller_input in,
+static struct controller check_transition(int line, struct controller controller, struct controller_input in,
                                           game_action_kind want_action, controller_state_kind want_state)
 {
-    controller_state_kind from = c.state;
-    game_action_kind got_action = controller_handle(&c, in);
-    if (got_action != want_action || c.state != want_state)
+    controller_state_kind from = controller.state;
+    game_action_kind got_action = controller_handle(&controller, in);
+    if (got_action != want_action || controller.state != want_state)
     {
         printf("    line %d: %s + ", line, state_name(from));
         print_input(in);
         printf(": expected %s -> %s, got %s -> %s\n",
                action_name(want_action), state_name(want_state),
-               action_name(got_action), state_name(c.state));
+               action_name(got_action), state_name(controller.state));
         checks_failed++;
     }
-    return c;
+    return controller;
 }
 
 #define CHECK_TRANSITION(from, in, want_action, want_state) \
@@ -221,14 +221,14 @@ struct logged_action
 
 struct sim
 {
-    struct controller c;
+    struct controller controller;
     int log_count;
     struct logged_action log[LOG_CAPACITY];
 };
 
 static void sim_init(struct sim *s)
 {
-    controller_init(&s->c);
+    controller_init(&s->controller);
     s->log_count = 0;
 }
 
@@ -244,17 +244,17 @@ static void sim_idle_until(struct sim *s, uint64_t until_us)
 {
     while (1)
     {
-        uint64_t next = controller_next_deadline(&s->c);
+        uint64_t next = controller_next_deadline(&s->controller);
         if (next == ABSOLUTE_TIME_MAX || next > until_us)
         {
             return;
         }
-        sim_record(s, controller_handle(&s->c, deadline_at_us(next)), next);
-        if (controller_next_deadline(&s->c) == next)
+        sim_record(s, controller_handle(&s->controller, deadline_at_us(next)), next);
+        if (controller_next_deadline(&s->controller) == next)
         {
             printf("    deadline at ");
             print_time(next);
-            printf(" in state %s didn't move after handling it; the task would spin forever\n", state_name(s->c.state));
+            printf(" in state %s didn't move after handling it; the task would spin forever\n", state_name(s->controller.state));
             checks_failed++;
             return;
         }
@@ -264,7 +264,7 @@ static void sim_idle_until(struct sim *s, uint64_t until_us)
 static void sim_input(struct sim *s, struct controller_input in)
 {
     sim_idle_until(s, in.event_time);
-    sim_record(s, controller_handle(&s->c, in), in.event_time);
+    sim_record(s, controller_handle(&s->controller, in), in.event_time);
 }
 
 static void print_log(const struct sim *s)
@@ -322,8 +322,8 @@ static void check_log(const struct sim *s, int line, const struct expected_actio
 
 static void test_idle_has_no_deadline(void)
 {
-    struct controller c = controller_in(CONTROLLER_IDLE, HELD_NONE, ANY_BUTTON, NO_TIMER);
-    CHECK_TIME(NO_DEADLINE, controller_next_deadline(&c));
+    struct controller controller = controller_in(CONTROLLER_IDLE, HELD_NONE, ANY_BUTTON, NO_TIMER);
+    CHECK_TIME(NO_DEADLINE, controller_next_deadline(&controller));
 
     // a leftover timer from an earlier gesture mustn't create a deadline
     struct controller stale = controller_in(CONTROLLER_IDLE, HELD_NONE, ANY_BUTTON, 0);
@@ -341,8 +341,8 @@ static void test_single_click_deadline_is_click_ceiling_after_press(void)
 
 static void test_single_cont_adj_has_no_deadline(void)
 {
-    struct controller c = controller_in(CONTROLLER_SINGLE_CONT_ADJ, HELD_UP, UP, 0);
-    CHECK_TIME(NO_DEADLINE, controller_next_deadline(&c));
+    struct controller controller = controller_in(CONTROLLER_SINGLE_CONT_ADJ, HELD_UP, UP, 0);
+    CHECK_TIME(NO_DEADLINE, controller_next_deadline(&controller));
 
     // the other button is ignored during continuous adjust, so it mustn't create a deadline either
     struct controller other_held = controller_in(CONTROLLER_SINGLE_CONT_ADJ, HELD_BOTH, UP, 500);
@@ -352,20 +352,20 @@ static void test_single_cont_adj_has_no_deadline(void)
 // The timer for the two-button states starts at the press that made it a two-button gesture (the second press).
 static void test_two_click_deadline_is_click_ceiling_after_second_press(void)
 {
-    struct controller c = controller_in(CONTROLLER_TWO_CLICK, HELD_BOTH, ANY_BUTTON, 150);
-    CHECK_TIME(AT_MS(350), controller_next_deadline(&c));
+    struct controller controller = controller_in(CONTROLLER_TWO_CLICK, HELD_BOTH, ANY_BUTTON, 150);
+    CHECK_TIME(AT_MS(350), controller_next_deadline(&controller));
 }
 
 static void test_two_short_hold_deadline_is_short_hold_ceiling_after_second_press(void)
 {
-    struct controller c = controller_in(CONTROLLER_TWO_SHORT_HOLD, HELD_BOTH, ANY_BUTTON, 150);
-    CHECK_TIME(AT_MS(1150), controller_next_deadline(&c));
+    struct controller controller = controller_in(CONTROLLER_TWO_SHORT_HOLD, HELD_BOTH, ANY_BUTTON, 150);
+    CHECK_TIME(AT_MS(1150), controller_next_deadline(&controller));
 }
 
 static void test_two_long_hold_has_no_deadline(void)
 {
-    struct controller c = controller_in(CONTROLLER_TWO_LONG_HOLD, HELD_BOTH, ANY_BUTTON, 150);
-    CHECK_TIME(NO_DEADLINE, controller_next_deadline(&c));
+    struct controller controller = controller_in(CONTROLLER_TWO_LONG_HOLD, HELD_BOTH, ANY_BUTTON, 150);
+    CHECK_TIME(NO_DEADLINE, controller_next_deadline(&controller));
 }
 
 static void test_lockout_has_no_deadline(void)
@@ -383,47 +383,47 @@ static void test_lockout_has_no_deadline(void)
 
 static void test_idle_transitions(void)
 {
-    struct controller c = CHECK_TRANSITION(controller_in(CONTROLLER_IDLE, HELD_NONE, ANY_BUTTON, NO_TIMER),
+    struct controller controller = CHECK_TRANSITION(controller_in(CONTROLLER_IDLE, HELD_NONE, ANY_BUTTON, NO_TIMER),
                                            press(UP, 5), NO_OP, CONTROLLER_SINGLE_CLICK);
-    CHECK_HELD(HELD_UP, c.held);
-    CHECK_BUTTON(UP, c.active_button);
-    CHECK_TIME(AT_MS(205), controller_next_deadline(&c));
+    CHECK_HELD(HELD_UP, controller.held);
+    CHECK_BUTTON(UP, controller.active_button);
+    CHECK_TIME(AT_MS(205), controller_next_deadline(&controller));
 
-    c = CHECK_TRANSITION(controller_in(CONTROLLER_IDLE, HELD_NONE, ANY_BUTTON, NO_TIMER),
+    controller = CHECK_TRANSITION(controller_in(CONTROLLER_IDLE, HELD_NONE, ANY_BUTTON, NO_TIMER),
                          press(DOWN, 5), NO_OP, CONTROLLER_SINGLE_CLICK);
-    CHECK_HELD(HELD_DOWN, c.held);
-    CHECK_BUTTON(DOWN, c.active_button);
-    CHECK_TIME(AT_MS(205), controller_next_deadline(&c));
+    CHECK_HELD(HELD_DOWN, controller.held);
+    CHECK_BUTTON(DOWN, controller.active_button);
+    CHECK_TIME(AT_MS(205), controller_next_deadline(&controller));
 }
 
 // A click only counts on release, because the press might turn out to be the start of a two-button gesture.
 static void test_single_click_transitions(void)
 {
-    struct controller c = CHECK_TRANSITION(controller_in(CONTROLLER_SINGLE_CLICK, HELD_UP, UP, 0),
+    struct controller controller = CHECK_TRANSITION(controller_in(CONTROLLER_SINGLE_CLICK, HELD_UP, UP, 0),
                                            release(UP, 100), INCREMENT_CHANNEL_VALUE, CONTROLLER_IDLE);
-    CHECK_HELD(HELD_NONE, c.held);
+    CHECK_HELD(HELD_NONE, controller.held);
     CHECK_TRANSITION(controller_in(CONTROLLER_SINGLE_CLICK, HELD_DOWN, DOWN, 0),
                      release(DOWN, 100), DECREMENT_CHANNEL_VALUE, CONTROLLER_IDLE);
 
     // a deadline has no button: it mustn't change which buttons are held or which one is adjusting
-    c = CHECK_TRANSITION(controller_in(CONTROLLER_SINGLE_CLICK, HELD_UP, UP, 0),
+    controller = CHECK_TRANSITION(controller_in(CONTROLLER_SINGLE_CLICK, HELD_UP, UP, 0),
                          deadline(200), START_CONT_INC_CHANNEL_VALUE, CONTROLLER_SINGLE_CONT_ADJ);
-    CHECK_HELD(HELD_UP, c.held);
-    CHECK_BUTTON(UP, c.active_button);
-    c = CHECK_TRANSITION(controller_in(CONTROLLER_SINGLE_CLICK, HELD_DOWN, DOWN, 0),
+    CHECK_HELD(HELD_UP, controller.held);
+    CHECK_BUTTON(UP, controller.active_button);
+    controller = CHECK_TRANSITION(controller_in(CONTROLLER_SINGLE_CLICK, HELD_DOWN, DOWN, 0),
                          deadline(200), START_CONT_DEC_CHANNEL_VALUE, CONTROLLER_SINGLE_CONT_ADJ);
-    CHECK_HELD(HELD_DOWN, c.held);
-    CHECK_BUTTON(DOWN, c.active_button);
+    CHECK_HELD(HELD_DOWN, controller.held);
+    CHECK_BUTTON(DOWN, controller.active_button);
 
     // the second press restarts the timer for the two-button timings
-    c = CHECK_TRANSITION(controller_in(CONTROLLER_SINGLE_CLICK, HELD_UP, UP, 0),
+    controller = CHECK_TRANSITION(controller_in(CONTROLLER_SINGLE_CLICK, HELD_UP, UP, 0),
                          press(DOWN, 150), NO_OP, CONTROLLER_TWO_CLICK);
-    CHECK_HELD(HELD_BOTH, c.held);
-    CHECK_TIME(AT_MS(350), controller_next_deadline(&c));
-    c = CHECK_TRANSITION(controller_in(CONTROLLER_SINGLE_CLICK, HELD_DOWN, DOWN, 0),
+    CHECK_HELD(HELD_BOTH, controller.held);
+    CHECK_TIME(AT_MS(350), controller_next_deadline(&controller));
+    controller = CHECK_TRANSITION(controller_in(CONTROLLER_SINGLE_CLICK, HELD_DOWN, DOWN, 0),
                          press(UP, 150), NO_OP, CONTROLLER_TWO_CLICK);
-    CHECK_HELD(HELD_BOTH, c.held);
-    CHECK_TIME(AT_MS(350), controller_next_deadline(&c));
+    CHECK_HELD(HELD_BOTH, controller.held);
+    CHECK_TIME(AT_MS(350), controller_next_deadline(&controller));
 }
 
 // Only the release of the button doing the adjusting (the one pressed first) matters.
@@ -435,12 +435,12 @@ static void test_single_cont_adj_transitions(void)
                      release(DOWN, 900), STOP_CONT_DEC_CHANNEL_VALUE, CONTROLLER_IDLE);
 
     // the other button is tracked but otherwise ignored
-    struct controller c = CHECK_TRANSITION(controller_in(CONTROLLER_SINGLE_CONT_ADJ, HELD_UP, UP, NO_TIMER),
+    struct controller controller = CHECK_TRANSITION(controller_in(CONTROLLER_SINGLE_CONT_ADJ, HELD_UP, UP, NO_TIMER),
                                            press(DOWN, 300), NO_OP, CONTROLLER_SINGLE_CONT_ADJ);
-    CHECK_HELD(HELD_BOTH, c.held);
-    c = CHECK_TRANSITION(controller_in(CONTROLLER_SINGLE_CONT_ADJ, HELD_BOTH, UP, NO_TIMER),
+    CHECK_HELD(HELD_BOTH, controller.held);
+    controller = CHECK_TRANSITION(controller_in(CONTROLLER_SINGLE_CONT_ADJ, HELD_BOTH, UP, NO_TIMER),
                          release(DOWN, 500), NO_OP, CONTROLLER_SINGLE_CONT_ADJ);
-    CHECK_HELD(HELD_UP, c.held);
+    CHECK_HELD(HELD_UP, controller.held);
     CHECK_TRANSITION(controller_in(CONTROLLER_SINGLE_CONT_ADJ, HELD_BOTH, DOWN, NO_TIMER),
                      release(UP, 500), NO_OP, CONTROLLER_SINGLE_CONT_ADJ);
 
@@ -453,18 +453,18 @@ static void test_single_cont_adj_transitions(void)
 
 static void test_two_click_transitions(void)
 {
-    struct controller c = CHECK_TRANSITION(controller_in(CONTROLLER_TWO_CLICK, HELD_BOTH, ANY_BUTTON, 150),
+    struct controller controller = CHECK_TRANSITION(controller_in(CONTROLLER_TWO_CLICK, HELD_BOTH, ANY_BUTTON, 150),
                                            release(UP, 250), NEXT_COLOR_CHANNEL, CONTROLLER_LOCKOUT);
-    CHECK_HELD(HELD_DOWN, c.held);
-    c = CHECK_TRANSITION(controller_in(CONTROLLER_TWO_CLICK, HELD_BOTH, ANY_BUTTON, 150),
+    CHECK_HELD(HELD_DOWN, controller.held);
+    controller = CHECK_TRANSITION(controller_in(CONTROLLER_TWO_CLICK, HELD_BOTH, ANY_BUTTON, 150),
                          release(DOWN, 250), NEXT_COLOR_CHANNEL, CONTROLLER_LOCKOUT);
-    CHECK_HELD(HELD_UP, c.held);
+    CHECK_HELD(HELD_UP, controller.held);
 
     // the short-hold deadline is measured from the second press too, not from the click deadline
-    c = CHECK_TRANSITION(controller_in(CONTROLLER_TWO_CLICK, HELD_BOTH, ANY_BUTTON, 150),
+    controller = CHECK_TRANSITION(controller_in(CONTROLLER_TWO_CLICK, HELD_BOTH, ANY_BUTTON, 150),
                          deadline(350), INDICATE_HOLD_THRESHOLD_PASSED, CONTROLLER_TWO_SHORT_HOLD);
-    CHECK_HELD(HELD_BOTH, c.held);
-    CHECK_TIME(AT_MS(1150), controller_next_deadline(&c));
+    CHECK_HELD(HELD_BOTH, controller.held);
+    CHECK_TIME(AT_MS(1150), controller_next_deadline(&controller));
 }
 
 static void test_two_short_hold_transitions(void)
@@ -473,9 +473,9 @@ static void test_two_short_hold_transitions(void)
                      release(UP, 600), CONFIRM_GUESS, CONTROLLER_LOCKOUT);
     CHECK_TRANSITION(controller_in(CONTROLLER_TWO_SHORT_HOLD, HELD_BOTH, ANY_BUTTON, 150),
                      release(DOWN, 600), CONFIRM_GUESS, CONTROLLER_LOCKOUT);
-    struct controller c = CHECK_TRANSITION(controller_in(CONTROLLER_TWO_SHORT_HOLD, HELD_BOTH, ANY_BUTTON, 150),
+    struct controller controller = CHECK_TRANSITION(controller_in(CONTROLLER_TWO_SHORT_HOLD, HELD_BOTH, ANY_BUTTON, 150),
                                            deadline(1150), INDICATE_HOLD_THRESHOLD_PASSED, CONTROLLER_TWO_LONG_HOLD);
-    CHECK_HELD(HELD_BOTH, c.held);
+    CHECK_HELD(HELD_BOTH, controller.held);
 }
 
 static void test_two_long_hold_transitions(void)
@@ -494,12 +494,12 @@ static void test_lockout_transitions(void)
     CHECK_TRANSITION(controller_in(CONTROLLER_LOCKOUT, HELD_DOWN, ANY_BUTTON, NO_TIMER),
                      release(DOWN, 2000), NO_OP, CONTROLLER_IDLE);
 
-    struct controller c = CHECK_TRANSITION(controller_in(CONTROLLER_LOCKOUT, HELD_BOTH, ANY_BUTTON, NO_TIMER),
+    struct controller controller = CHECK_TRANSITION(controller_in(CONTROLLER_LOCKOUT, HELD_BOTH, ANY_BUTTON, NO_TIMER),
                                            release(UP, 2000), NO_OP, CONTROLLER_LOCKOUT);
-    CHECK_HELD(HELD_DOWN, c.held);
-    c = CHECK_TRANSITION(controller_in(CONTROLLER_LOCKOUT, HELD_DOWN, ANY_BUTTON, NO_TIMER),
+    CHECK_HELD(HELD_DOWN, controller.held);
+    controller = CHECK_TRANSITION(controller_in(CONTROLLER_LOCKOUT, HELD_DOWN, ANY_BUTTON, NO_TIMER),
                          press(UP, 2000), NO_OP, CONTROLLER_LOCKOUT);
-    CHECK_HELD(HELD_BOTH, c.held);
+    CHECK_HELD(HELD_BOTH, controller.held);
 }
 
 //////////////////////////////////////////
@@ -513,7 +513,7 @@ static void test_gesture_up_click(void)
     sim_input(&s, press(UP, 0));
     sim_input(&s, release(UP, 100));
     CHECK_LOG(&s, {INCREMENT_CHANNEL_VALUE, 100});
-    CHECK_STATE(CONTROLLER_IDLE, s.c.state);
+    CHECK_STATE(CONTROLLER_IDLE, s.controller.state);
 }
 
 static void test_gesture_down_click(void)
@@ -523,7 +523,7 @@ static void test_gesture_down_click(void)
     sim_input(&s, press(DOWN, 0));
     sim_input(&s, release(DOWN, 100));
     CHECK_LOG(&s, {DECREMENT_CHANNEL_VALUE, 100});
-    CHECK_STATE(CONTROLLER_IDLE, s.c.state);
+    CHECK_STATE(CONTROLLER_IDLE, s.controller.state);
 }
 
 static void test_gesture_up_hold(void)
@@ -533,7 +533,7 @@ static void test_gesture_up_hold(void)
     sim_input(&s, press(UP, 0));
     sim_input(&s, release(UP, 1500));
     CHECK_LOG(&s, {START_CONT_INC_CHANNEL_VALUE, 200}, {STOP_CONT_INC_CHANNEL_VALUE, 1500});
-    CHECK_STATE(CONTROLLER_IDLE, s.c.state);
+    CHECK_STATE(CONTROLLER_IDLE, s.controller.state);
 }
 
 static void test_gesture_down_hold(void)
@@ -543,7 +543,7 @@ static void test_gesture_down_hold(void)
     sim_input(&s, press(DOWN, 0));
     sim_input(&s, release(DOWN, 1500));
     CHECK_LOG(&s, {START_CONT_DEC_CHANNEL_VALUE, 200}, {STOP_CONT_DEC_CHANNEL_VALUE, 1500});
-    CHECK_STATE(CONTROLLER_IDLE, s.c.state);
+    CHECK_STATE(CONTROLLER_IDLE, s.controller.state);
 }
 
 static void test_gesture_other_button_tapped_during_hold_is_ignored(void)
@@ -555,7 +555,7 @@ static void test_gesture_other_button_tapped_during_hold_is_ignored(void)
     sim_input(&s, release(DOWN, 500));
     sim_input(&s, release(UP, 900));
     CHECK_LOG(&s, {START_CONT_INC_CHANNEL_VALUE, 200}, {STOP_CONT_INC_CHANNEL_VALUE, 900});
-    CHECK_STATE(CONTROLLER_IDLE, s.c.state);
+    CHECK_STATE(CONTROLLER_IDLE, s.controller.state);
 }
 
 static void test_gesture_hold_released_while_other_held_waits_for_both_up(void)
@@ -565,9 +565,9 @@ static void test_gesture_hold_released_while_other_held_waits_for_both_up(void)
     sim_input(&s, press(UP, 0));
     sim_input(&s, press(DOWN, 300));
     sim_input(&s, release(UP, 600));
-    CHECK_STATE(CONTROLLER_LOCKOUT, s.c.state);
+    CHECK_STATE(CONTROLLER_LOCKOUT, s.controller.state);
     sim_input(&s, release(DOWN, 2000)); // down held well past every threshold: still nothing
-    CHECK_STATE(CONTROLLER_IDLE, s.c.state);
+    CHECK_STATE(CONTROLLER_IDLE, s.controller.state);
 
     sim_input(&s, press(UP, 3000));
     sim_input(&s, release(UP, 3100));
@@ -583,7 +583,7 @@ static void test_gesture_two_button_click_moves_to_next_channel(void)
     sim_input(&s, release(UP, 250));
     sim_input(&s, release(DOWN, 300));
     CHECK_LOG(&s, {NEXT_COLOR_CHANNEL, 250});
-    CHECK_STATE(CONTROLLER_IDLE, s.c.state);
+    CHECK_STATE(CONTROLLER_IDLE, s.controller.state);
 }
 
 // The click window restarts at the second press: 190ms + 180ms is past 200ms from the first press, but still a click.
@@ -606,7 +606,7 @@ static void test_gesture_two_button_short_hold_confirms_guess(void)
     sim_input(&s, release(DOWN, 600));
     sim_input(&s, release(UP, 650));
     CHECK_LOG(&s, {INDICATE_HOLD_THRESHOLD_PASSED, 350}, {CONFIRM_GUESS, 600});
-    CHECK_STATE(CONTROLLER_IDLE, s.c.state);
+    CHECK_STATE(CONTROLLER_IDLE, s.controller.state);
 }
 
 static void test_gesture_two_button_long_hold_starts_new_game(void)
@@ -618,7 +618,7 @@ static void test_gesture_two_button_long_hold_starts_new_game(void)
     sim_input(&s, release(UP, 1500));
     sim_input(&s, release(DOWN, 1600));
     CHECK_LOG(&s, {INDICATE_HOLD_THRESHOLD_PASSED, 350}, {INDICATE_HOLD_THRESHOLD_PASSED, 1150}, {START_NEW_GAME, 1500});
-    CHECK_STATE(CONTROLLER_IDLE, s.c.state);
+    CHECK_STATE(CONTROLLER_IDLE, s.controller.state);
 }
 
 static void test_gesture_lockout_after_two_button_gesture(void)
@@ -631,7 +631,7 @@ static void test_gesture_lockout_after_two_button_gesture(void)
     sim_input(&s, press(UP, 3000));   // down held far past every threshold, then up pressed and released again
     sim_input(&s, release(UP, 3200));
     sim_input(&s, release(DOWN, 3300));
-    CHECK_STATE(CONTROLLER_IDLE, s.c.state);
+    CHECK_STATE(CONTROLLER_IDLE, s.controller.state);
 
     sim_input(&s, press(UP, 4000));
     sim_input(&s, release(UP, 4050));

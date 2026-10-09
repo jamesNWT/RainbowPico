@@ -12,8 +12,8 @@
 #include <stdio.h>
 #include <string.h>
 
-static QueueHandle_t but_event_queue;
-static QueueHandle_t but_irq_queue;
+static QueueHandle_t button_event_queue;
+static QueueHandle_t button_irq_queue;
 
 void test_leds_task(void *pvParameters) {
   while (1) {
@@ -86,7 +86,7 @@ void color_sine_task(void *pvParameters) {
   }
 }
 
-struct but_irq {
+struct button_irq {
   uint pin;
   absolute_time_t time;
 };
@@ -94,33 +94,33 @@ struct but_irq {
 void button_interrupt_cb(uint gpio, uint32_t event_mask) {
   gpio_set_irq_enabled(gpio, event_mask, false);
 
-  struct but_irq irq = {.pin = gpio, .time = get_absolute_time()};
+  struct button_irq irq = {.pin = gpio, .time = get_absolute_time()};
 
-  xQueueSendFromISR(but_irq_queue, &irq, NULL);
+  xQueueSendFromISR(button_irq_queue, &irq, NULL);
 }
 
-void deferred_button_interupt_handler(void *pvParameters) {
-  struct but_irq irq;
+void deferred_button_interrupt_handler(void *pvParameters) {
+  struct button_irq irq;
 
-  bool last_stable_up_but_state = HIGH, last_stabel_down_but_state = HIGH;
+  bool last_stable_up_button_state = HIGH, last_stable_down_button_state = HIGH;
 
   while (1) {
-    xQueueReceive(but_irq_queue, &irq, portMAX_DELAY);
+    xQueueReceive(button_irq_queue, &irq, portMAX_DELAY);
     vTaskDelay(pdMS_TO_TICKS(DEBOUNCE_DELAY_MS));
     bool debounced_reading = gpio_get(irq.pin);
 
     gpio_set_irq_enabled(irq.pin, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL,
                          true); // re-enable irqs after debounce delay
 
-    if ((irq.pin == UP_BUTTON_PIN && debounced_reading != last_stable_up_but_state) ||
-        (irq.pin == DOWN_BUTTON_PIN && debounced_reading != last_stabel_down_but_state)) {
+    if ((irq.pin == UP_BUTTON_PIN && debounced_reading != last_stable_up_button_state) ||
+        (irq.pin == DOWN_BUTTON_PIN && debounced_reading != last_stable_down_button_state)) {
       struct button_event button = {
           .pin = irq.pin, .is_pressed = (debounced_reading == LOW ? true : false), .time_changed = irq.time};
-      xQueueSend(but_event_queue, &button, 0);
+      xQueueSend(button_event_queue, &button, 0);
       if (irq.pin == UP_BUTTON_PIN) {
-        last_stable_up_but_state = debounced_reading;
+        last_stable_up_button_state = debounced_reading;
       } else {
-        last_stabel_down_but_state = debounced_reading;
+        last_stable_down_button_state = debounced_reading;
       }
     }
   }
@@ -134,7 +134,7 @@ static TickType_t us_to_ticks(uint64_t us) {
 }
 
 void button_controller_task(void *pvParameters) {
-  struct button_event but_event_buf;
+  struct button_event button_event_buf;
 
   struct controller controller;
   controller_init(&controller);
@@ -146,17 +146,17 @@ void button_controller_task(void *pvParameters) {
   struct controller_input input;
 
   while (1) {
-    BaseType_t queue_receive = xQueueReceive(but_event_queue, &but_event_buf, ticks_until_next_deadline);
+    BaseType_t queue_receive = xQueueReceive(button_event_queue, &button_event_buf, ticks_until_next_deadline);
 
     input.event_time = get_absolute_time();
 
     // create the input event
     if (queue_receive == pdPASS) // this iteration is caused by a button event
     {
-      input.affect_button = but_event_buf.pin == UP_BUTTON_PIN ? UP_BUTTON_INDEX : DOWN_BUTTON_INDEX;
-      input.event_type = but_event_buf.is_pressed ? EV_PRESS : EV_RELEASE;
-    } else // this iteration was caused by a deadline (no item recieved from
-           // but_event_queue)
+      input.affect_button = button_event_buf.pin == UP_BUTTON_PIN ? UP_BUTTON_INDEX : DOWN_BUTTON_INDEX;
+      input.event_type = button_event_buf.is_pressed ? EV_PRESS : EV_RELEASE;
+    } else // this iteration was caused by a deadline (no item received from
+           // button_event_queue)
     {
       input.event_type = EV_DEADLINE;
     }
@@ -176,9 +176,9 @@ void button_controller_task(void *pvParameters) {
     // just before a threshold.
     printf("NEXT ACTION DETECTED: %s\n", game_action_to_string(next_action));
     if (queue_receive == pdPASS) {
-      printf("\t%s %s @ %llums -> %s\n", but_event_buf.pin == UP_BUTTON_PIN ? "up" : "down",
-             but_event_buf.is_pressed ? "press" : "release", (unsigned long long)(but_event_buf.time_changed / 1000),
-             controller_to_string(&controller));
+      printf("\t%s %s @ %llums -> %s\n", button_event_buf.pin == UP_BUTTON_PIN ? "up" : "down",
+             button_event_buf.is_pressed ? "press" : "release",
+             (unsigned long long)(button_event_buf.time_changed / 1000), controller_to_string(&controller));
     } else if (next_action != NO_OP) {
       printf("\tthreshold wake @ %llums -> %s\n", (unsigned long long)(input.event_time / 1000),
              controller_to_string(&controller));
@@ -223,16 +223,16 @@ int main() {
   xTaskCreate(color_sine_task, "TEST_PLAY_RGB_LED", 256, &play_rgb_led, 1, NULL);
   xTaskCreate(color_sine_task, "TEST_TARGET_RGB_LED", 256, &target_rgb_led, 1, NULL);
 
-  but_event_queue = xQueueCreate(10, sizeof(struct button_event));
+  button_event_queue = xQueueCreate(10, sizeof(struct button_event));
   xTaskCreate(button_controller_task, "RESPOND_TO_BUTTON_TASK", 256, NULL, 1, NULL);
 
-  but_irq_queue = xQueueCreate(10, sizeof(struct but_irq));
+  button_irq_queue = xQueueCreate(10, sizeof(struct button_irq));
 
   gpio_set_irq_enabled_with_callback(UP_BUTTON_PIN, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true, button_interrupt_cb);
   gpio_set_irq_enabled_with_callback(DOWN_BUTTON_PIN, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true,
                                      button_interrupt_cb);
 
-  xTaskCreate(deferred_button_interupt_handler, "DEFERRED_BUTTON_INTERUPT_HANDLER", 256, NULL, 2, NULL);
+  xTaskCreate(deferred_button_interrupt_handler, "DEFERRED_BUTTON_INTERRUPT_HANDLER", 256, NULL, 2, NULL);
 
   while (!stdio_usb_connected()) {
     sleep_ms(100);

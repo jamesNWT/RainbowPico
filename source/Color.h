@@ -8,7 +8,7 @@ struct rgb_color {
   uint8_t blue;
 };
 
-// Compensaste for different LEDs having different brightnesses at the same PWM
+// Compensate for different LEDs having different brightnesses at the same PWM
 // level. These values are determined experimentally.
 #define RED_CHANNEL_SCALE 1.0f
 #define GREEN_CHANNEL_SCALE 0.7f

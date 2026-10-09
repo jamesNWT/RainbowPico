@@ -1,7 +1,7 @@
 #include "Controller.h"
 #include <stdio.h>
 
-char *controller_state_to_string(controller_state_kind state) {
+const char *controller_state_to_string(controller_state_kind state) {
   switch (state) {
   case CONTROLLER_IDLE:
     return "IDLE";
@@ -22,7 +22,7 @@ char *controller_state_to_string(controller_state_kind state) {
   }
 }
 
-char *controller_to_string(struct controller *controller) {
+const char *controller_to_string(const struct controller *controller) {
   static char buf[256];
   char up[48];
   char down[48];
@@ -36,7 +36,7 @@ char *controller_to_string(struct controller *controller) {
   return buf;
 }
 
-char *game_action_to_string(game_action_kind action) {
+const char *game_action_to_string(game_action_kind action) {
   switch (action) {
   case INCREMENT_CHANNEL_VALUE:
     return "INCREMENT_CHANNEL_VALUE";
