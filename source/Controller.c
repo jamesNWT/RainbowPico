@@ -19,17 +19,6 @@ void controller_init(struct controller *controller)
     };
 }
 
-void update_controller_button_state(struct button *button, struct button_event *event)
-{
-    if (event->is_pressed) {
-        button->is_pressed = true;
-        button->time_press = event->time_changed;
-    } else {
-        button->is_pressed = false;
-        button->time_press = ABSOLUTE_TIME_MAX;
-    }
-}
-
 void update_controller_button(struct button *button, uint64_t time, bool is_press) {
     if (is_press) {
         button->is_pressed = true;
@@ -61,17 +50,21 @@ uint64_t controller_next_deadline(const struct controller *controller) {
 }
 
 game_action controller_handle(struct controller *controller, struct controller_input input) {
+    
+    // button bookkeeping
+    if (input.event_type == EV_UP_PRESSED || input.event_type == EV_UP_RELEASED) {
+        update_controller_button(&controller->up, input.event_time, input.event_type == EV_UP_PRESSED);
+    } else if (input.event_type == EV_DOWN_PRESSED || input.event_type == EV_DOWN_RELEASED) {
+        update_controller_button(&controller->down, input.event_time, input.event_type == EV_DOWN_PRESSED);
+    }
+
     switch (controller->state) {
         case CONTROLLER_IDLE:
             switch (input.event_type) {
                 case EV_DOWN_PRESSED:
-                    controller->down.is_pressed = true;
-                    controller->down.time_press = input.event_time;
                     controller->state = CONTROLLER_SINGLE_CLICK;
                     break;
                 case EV_UP_PRESSED:
-                    controller->up.is_pressed = true;
-                    controller->up.time_press = input.event_time;
                     controller->state = CONTROLLER_SINGLE_CLICK;
                     break;
                 default:
@@ -86,16 +79,21 @@ game_action controller_handle(struct controller *controller, struct controller_i
                 case EV_DOWN_RELEASED:
                     controller->state = CONTROLLER_IDLE;
                     return DECREMENT_CHANNEL_VALUE;
+                case EV_UP_PRESSED:
+                case EV_DOWN_PRESSED:
+                    controller->state = CONTROLLER_TWO_CLICK;
+                    return NO_OP;
                 case EV_DEADLINE:
                     controller->state = CONTROLLER_SINGLE_CONT_ADJ;
-                    // if (controller->up.is_pressed && controller->down.is_pressed) {
-                    //     return controller->up.time_press < controller->down.time_press ? START_CONT_INC_CHANNEL_VALUE : START_CONT_DEC_CHANNEL_VALUE;
-                    // }
                     return controller->up.time_press < controller->down.time_press ? START_CONT_INC_CHANNEL_VALUE : START_CONT_DEC_CHANNEL_VALUE;
                 default:
                     break;
             }
+            break;
         case CONTROLLER_SINGLE_CONT_ADJ:
+            bool was_continuous_decrement = controller->down.time_press < controller->up.time_press;
+            switch (input.event_type) {
+            }
             break;
         case CONTROLLER_TWO_CLICK:
             break;

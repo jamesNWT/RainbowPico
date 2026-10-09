@@ -80,8 +80,6 @@ struct controller_input {
 
 void controller_init(struct controller *controller);
 
-void update_controller_button_state(struct button *button, struct button_event *event);
-
 game_action controller_handle(struct controller *controller, struct controller_input input);
 
 uint64_t controller_next_deadline(const struct controller *controller);

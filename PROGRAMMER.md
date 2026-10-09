@@ -86,6 +86,7 @@ into domains of:
     - hold_threshold passed events are quadruple firing 
     - it appears I'm not properly updating last threshold crossed for buttons.
     - I have no way of differentiating the first button press of a double press from a single press
+  - I decided to go back to almost square one on this and take the time to actually learn about the theory of event/input-driven state machines. I recalled some of my undergrad learnings about Finite State Machines. I stopped tracking state as an aggregation of every single button and deadline event and started keeping track of it as basically a single enumeration and some book keeping about the state of the two buttons. This dramatically simplifies the logic. I also had claude re-write the tests for this architecture.
 
 ## Current goal
 

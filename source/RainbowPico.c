@@ -165,7 +165,7 @@ void button_controller_task(void *pvParameters)
     {
         BaseType_t queue_receive = xQueueReceive(but_event_queue, &but_event_buf, ticks_until_next_deadline);
 
-        // create the input event, and update the internal button states
+        // create the input event
         if (queue_receive == pdPASS) // this iteration is caused by a button event
         {
             input.event_time = but_event_buf.time_changed;
@@ -176,15 +176,12 @@ void button_controller_task(void *pvParameters)
                 } else {
                     input.event_type = EV_UP_RELEASED;
                 }
-                update_controller_button_state(&controller.up, &but_event_buf);
-
             } else {
                 if (but_event_buf.is_pressed) {
                     input.event_type = EV_DOWN_PRESSED;
                 } else {
                     input.event_type = EV_DOWN_RELEASED;
                 }
-                update_controller_button_state(&controller.down, &but_event_buf);
             }
         }
         else // this iteration was caused by a deadline (no item recieved from but_event_queue)
