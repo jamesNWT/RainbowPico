@@ -1,7 +1,7 @@
 #include "Controller.h"
 #include <stdio.h>
 
-char *controller_state_to_string(controller_state state) {
+char *controller_state_to_string(controller_state_kind state) {
     switch (state) {
         case CONTROLLER_IDLE:
             return "IDLE";
@@ -22,30 +22,21 @@ char *controller_state_to_string(controller_state state) {
     }
 }
 
-static void button_to_string(const struct button *button, char *out, size_t out_len)
-{
-    if (button->is_pressed)
-    {
-        snprintf(out, out_len, "pressed@%llums", (unsigned long long)(button->time_press / 1000));
-    }
-    else
-    {
-        snprintf(out, out_len, "released");
-    }
-}
-
 char *controller_to_string(struct controller *controller)
 {
-    static char buf[128];
+    static char buf[256];
     char up[48];
     char down[48];
-    button_to_string(&controller->up, up, sizeof up);
-    button_to_string(&controller->down, down, sizeof down);
-    snprintf(buf, sizeof buf, "up{%s} down{%s} state=%s", up, down, controller_state_to_string(controller->state));
+    char active[48];
+    snprintf(up, sizeof up, "%s", controller->held & (1u << UP_BUTTON_INDEX) ? "pressed" : "released");
+    snprintf(down, sizeof down, "%s", controller->held & (1u << DOWN_BUTTON_INDEX) ? "pressed" : "released");
+    snprintf(active, sizeof up, "%s", controller->active_button == UP_BUTTON_INDEX ? "up" : "down");
+
+    snprintf(buf, sizeof buf, "up{%s} down{%s}, active_button=%s, timer_start={%llu}, state=%s", up, down, active, controller->timer_start, controller_state_to_string(controller->state));
     return buf;
 }
 
-char *game_action_to_string(game_action action) {
+char *game_action_to_string(game_action_kind action) {
     switch (action) {
         case INCREMENT_CHANNEL_VALUE:
             return "INCREMENT_CHANNEL_VALUE";

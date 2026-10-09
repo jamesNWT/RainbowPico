@@ -155,7 +155,7 @@ void button_controller_task(void *pvParameters)
     struct controller controller;
     controller_init(&controller);
 
-    game_action next_action = NO_OP;
+    game_action_kind next_action = NO_OP;
 
     TickType_t ticks_until_next_deadline = portMAX_DELAY;
 
@@ -169,20 +169,8 @@ void button_controller_task(void *pvParameters)
         if (queue_receive == pdPASS) // this iteration is caused by a button event
         {
             input.event_time = but_event_buf.time_changed;
-            if (but_event_buf.pin == UP_BUTTON_PIN) {
-                    
-                if (but_event_buf.is_pressed) {
-                    input.event_type = EV_UP_PRESSED;
-                } else {
-                    input.event_type = EV_UP_RELEASED;
-                }
-            } else {
-                if (but_event_buf.is_pressed) {
-                    input.event_type = EV_DOWN_PRESSED;
-                } else {
-                    input.event_type = EV_DOWN_RELEASED;
-                }
-            }
+            input.affect_button = but_event_buf.pin == UP_BUTTON_PIN ? UP_BUTTON_INDEX : DOWN_BUTTON_INDEX;
+            input.event_type = but_event_buf.is_pressed ? EV_PRESS : EV_RELEASE;
         }
         else // this iteration was caused by a deadline (no item recieved from but_event_queue)
         {
@@ -192,7 +180,7 @@ void button_controller_task(void *pvParameters)
 
         next_action = controller_handle(&controller, input);
 
-        ticks_until_next_deadline = absolute_time_diff_us(input.event_time, us_to_ticks(controller_next_deadline(&controller));
+        ticks_until_next_deadline = absolute_time_diff_us(input.event_time, us_to_ticks(controller_next_deadline(&controller)));
 
         // Diagnostics: what woke the task and the controller state after handling it.
         // NO_OP threshold wakes are skipped since the task can wake many times just before a threshold.

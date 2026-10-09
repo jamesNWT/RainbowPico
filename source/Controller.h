@@ -40,13 +40,24 @@ typedef enum
     CONTROLLER_TWO_SHORT_HOLD,
     CONTROLLER_TWO_LONG_HOLD,
     CONTROLLER_LOCKOUT
-} controller_state;
+} controller_state_kind;
+
+// this enum can give a name to both the index for our action arrays, and the position in the bit mask for the buttons.
+typedef enum {
+    UP_BUTTON_INDEX = 0u,
+    DOWN_BUTTON_INDEX = 1u,
+} button_index;
 
 struct controller
 {
-    struct button up;
-    struct button down;
-    controller_state state;
+    enum {
+        HELD_NONE = 0u,
+        HELD_UP = 1u << UP_BUTTON_INDEX, 
+        HELD_DOWN = 1u << DOWN_BUTTON_INDEX
+    } held; // bitmask indicating which buttons are held. eg. 00 = none, 01 = up, 11 = both.
+    controller_state_kind state;
+    button_index active_button; // meaningful in single-click and continuous-adjust states.
+    uint64_t timer_start; // meaningful in states that have a deadline
 };
 
 typedef enum
@@ -62,25 +73,24 @@ typedef enum
     START_NEW_GAME,
     INDICATE_HOLD_THRESHOLD_PASSED,
     NO_OP
-} game_action;
+} game_action_kind;
 
 typedef enum
 {
-    EV_UP_PRESSED,
-    EV_UP_RELEASED,
-    EV_DOWN_PRESSED,
-    EV_DOWN_RELEASED,
+    EV_PRESS,
+    EV_RELEASE,
     EV_DEADLINE
 } controller_event;
 
 struct controller_input {
     controller_event event_type;
     uint64_t event_time;
+    button_index affect_button;
 };
 
 void controller_init(struct controller *controller);
 
-game_action controller_handle(struct controller *controller, struct controller_input input);
+game_action_kind controller_handle(struct controller *controller, struct controller_input input);
 
 uint64_t controller_next_deadline(const struct controller *controller);
 
