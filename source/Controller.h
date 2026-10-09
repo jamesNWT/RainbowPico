@@ -14,7 +14,6 @@
 
 #define CLICK_CEILING_US (200 * 1000)
 #define SHORT_HOLD_CEILING_US (1000 * 1000)
-#define LONG_HOLD_FLOOR_US SHORT_HOLD_CEILING_US // pedantic but maybe helpful for reasoning.
 
 // Used both as "button is not pressed" for a duration/press time and "no deadline" for a wait.
 #define ABSOLUTE_TIME_MAX UINT64_MAX

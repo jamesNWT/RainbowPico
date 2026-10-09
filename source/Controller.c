@@ -35,7 +35,7 @@ uint64_t controller_next_deadline(const struct controller *controller) {
 game_action_kind controller_handle(struct controller *controller, struct controller_input input)
 {
     // regardless of state change and next action, update the button mask if this is a button input:
-    if (!input.event_type == EV_DEADLINE)
+    if (input.event_type != EV_DEADLINE)
     {
         uint8_t button_mask = 1u << input.affect_button; // affect_button works as index for the bit mask too!
         if (input.event_type == EV_PRESS)
@@ -64,6 +64,7 @@ game_action_kind controller_handle(struct controller *controller, struct control
             controller->timer_start = input.event_time;
             return NO_OP;
         }
+        break;
     case CONTROLLER_SINGLE_CLICK:
         switch (input.event_type)
         {
@@ -71,6 +72,7 @@ game_action_kind controller_handle(struct controller *controller, struct control
             controller->state = CONTROLLER_SINGLE_CONT_ADJ;
             return START_CONT_ACTION[controller->active_button];
         case EV_RELEASE:
+            controller->state = CONTROLLER_IDLE;
             return CLICK_ACTION[controller->active_button];
         case EV_PRESS:
             assert(input.affect_button != controller->active_button);
@@ -78,6 +80,7 @@ game_action_kind controller_handle(struct controller *controller, struct control
             controller->timer_start = input.event_time;
             return NO_OP;
         }
+        break;
     case CONTROLLER_SINGLE_CONT_ADJ:
         switch (input.event_type)
         {
@@ -87,14 +90,21 @@ game_action_kind controller_handle(struct controller *controller, struct control
         case EV_RELEASE:
             if (input.affect_button == controller->active_button)
             {
-                controller->state = CONTROLLER_IDLE;
+                // lockout if the non-affect button is pressed, otherwise idle
+                if (controller->held & ~(1u << input.affect_button))
+                {
+                    controller->state = CONTROLLER_LOCKOUT;
+                } else {
+                    controller->state = CONTROLLER_IDLE;
+                }
+                return STOP_CONT_ACTION[controller->active_button];
             }
             else
             {
-                controller->state = CONTROLLER_LOCKOUT;
+                return NO_OP;
             }
-            return STOP_CONT_ACTION[controller->active_button];
         }
+        break;
     case CONTROLLER_TWO_CLICK:
         assert(input.event_type != EV_PRESS); // it should be impossible for us to get a press event when both buttons are held!
         switch (input.event_type)
@@ -106,9 +116,9 @@ game_action_kind controller_handle(struct controller *controller, struct control
             return NEXT_COLOR_CHANNEL;
         case EV_DEADLINE:
             controller->state = CONTROLLER_TWO_SHORT_HOLD;
-            controller->timer_start = input.event_time;
             return INDICATE_HOLD_THRESHOLD_PASSED;
         }
+        break;
     case CONTROLLER_TWO_SHORT_HOLD:
         assert(input.event_type != EV_PRESS); // it should be impossible for us to get a press event when both buttons are held!
         switch (input.event_type)
@@ -122,6 +132,7 @@ game_action_kind controller_handle(struct controller *controller, struct control
             controller->state = CONTROLLER_TWO_LONG_HOLD;
             return INDICATE_HOLD_THRESHOLD_PASSED;
         }
+        break;
     case CONTROLLER_TWO_LONG_HOLD:
         assert(input.event_type != EV_PRESS); // it should be impossible for us to get a press event when both buttons are held!
         switch (input.event_type)
@@ -133,6 +144,7 @@ game_action_kind controller_handle(struct controller *controller, struct control
             controller->state = CONTROLLER_LOCKOUT;
             return START_NEW_GAME;
         }
+        break;
     case CONTROLLER_LOCKOUT:
         switch (input.event_type)
         {
@@ -146,8 +158,11 @@ game_action_kind controller_handle(struct controller *controller, struct control
             }
             return NO_OP;
         }
+        break;
     default:
         printf("Never should have come here!");
         return NO_OP;
     }
+    printf("Never should have come here!");
+    return NO_OP;
 }
