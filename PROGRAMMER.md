@@ -72,7 +72,7 @@ into domains of:
 - We can now detect when a button state changes, what state it is in, and how long a press is held.
 
 ### Yet better button polling
-- We now have more precise button polling by implementing the poll as an ISR.
+- We now have more precise button polling by implementing the poll as an ISR, and debouncing that detection between the ISR and its deferred handler task, which is given a higher priority over the application-level tasks.
 
 ### Controller state machine
 - I only have two buttons in my PICO kit, so the device has to be controller by these two buttons.
@@ -88,9 +88,16 @@ into domains of:
     - I have no way of differentiating the first button press of a double press from a single press
   - I decided to go back to almost square one on this and take the time to actually learn about the theory of event/input-driven state machines. I recalled some of my undergrad learnings about Finite State Machines. I stopped tracking state as an aggregation of every single button and deadline event and started keeping track of it as basically a single enumeration and some book keeping about the state of the two buttons. This dramatically simplifies the logic. I also had claude re-write the tests for this architecture.
 
+### Controller state machine: post-completion thoughts:
+
+- We moved information from the ISR and ISR-handler layer to the application layer by using a queue for button *events*, as opposed to the first ISR-level queue for button *interrupts*. 
+- We created a chart for states, their deadlines, and incoming evens and implemented the state transition / side effect logic against that in a big switch statement.
+- We iterated through a couple approaches to storing state, mostly stripping out information from state that made sense intuitively at first but wasn't actually needed for the state machine to function, and in fact made it more difficult to program the state machine. Eg, form storing the last_pressed time per-button, to a variable tracking which button is "active" and a single timer to time that button's press.
+- Discovered table-driven design to handle cases in the state machines where the differences in branches was only a value, (in this case, the value of next_action).  
+
 ## Current goal
 
-Change the device from simply displaying a light into a hue-matching color game.
+The controller logic is done, just need to actually write the functions that modify the LEDs in response to user input now.
 
 ## Later TODOs:
 
