@@ -145,7 +145,7 @@ static TickType_t us_to_ticks(uint64_t us)
     {
         return portMAX_DELAY;
     }
-    return pdMS_TO_TICKS(us / 1000);
+    return pdMS_TO_TICKS((us / 1000) + 1);
 }
 
 void button_controller_task(void *pvParameters)
@@ -165,23 +165,29 @@ void button_controller_task(void *pvParameters)
     {
         BaseType_t queue_receive = xQueueReceive(but_event_queue, &but_event_buf, ticks_until_next_deadline);
 
+        input.event_time = get_absolute_time();
+
         // create the input event
         if (queue_receive == pdPASS) // this iteration is caused by a button event
         {
-            input.event_time = but_event_buf.time_changed;
             input.affect_button = but_event_buf.pin == UP_BUTTON_PIN ? UP_BUTTON_INDEX : DOWN_BUTTON_INDEX;
             input.event_type = but_event_buf.is_pressed ? EV_PRESS : EV_RELEASE;
         }
         else // this iteration was caused by a deadline (no item recieved from but_event_queue)
         {
-            input.event_time = get_absolute_time();
             input.event_type = EV_DEADLINE;
         }
 
         next_action = controller_handle(&controller, input);
 
-        ticks_until_next_deadline = us_to_ticks(absolute_time_diff_us(input.event_time, controller_next_deadline(&controller)));
-
+        absolute_time_t next_deadline_us = controller_next_deadline(&controller);
+        if (next_deadline_us == ABSOLUTE_TIME_MAX) {
+            ticks_until_next_deadline = portMAX_DELAY;
+        } else {
+            int64_t time_diff = absolute_time_diff_us(input.event_time, next_deadline_us);
+            time_diff = time_diff > 0 ? time_diff : 0;
+            ticks_until_next_deadline = us_to_ticks(time_diff);
+        }
         // Diagnostics: what woke the task and the controller state after handling it.
         // NO_OP threshold wakes are skipped since the task can wake many times just before a threshold.
         printf("NEXT ACTION DETECTED: %s\n", game_action_to_string(next_action));
@@ -199,7 +205,7 @@ void button_controller_task(void *pvParameters)
                    (unsigned long long)(input.event_time / 1000),
                    controller_to_string(&controller));
         }
-        
+        printf("\t\tsmallest amount of free stack remaining (in words): %lu\n", uxTaskGetStackHighWaterMark(NULL));
     }
 }
 
