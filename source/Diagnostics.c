@@ -32,7 +32,7 @@ char *controller_to_string(struct controller *controller)
     snprintf(down, sizeof down, "%s", controller->held & (1u << DOWN_BUTTON_INDEX) ? "pressed" : "released");
     snprintf(active, sizeof up, "%s", controller->active_button == UP_BUTTON_INDEX ? "up" : "down");
 
-    snprintf(buf, sizeof buf, "up{%s} down{%s}, active_button=%s, timer_start={%llu}, state=%s", up, down, active, controller->timer_start, controller_state_to_string(controller->state));
+    snprintf(buf, sizeof buf, "up{%s} down{%s}, active_button=%s, timer_start={%llu}, state=%s", up, down, active, (controller->timer_start / 1000), controller_state_to_string(controller->state));
     return buf;
 }
 
