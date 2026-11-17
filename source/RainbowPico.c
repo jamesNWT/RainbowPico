@@ -174,7 +174,9 @@ void button_controller_task(void *pvParameters) {
     // Diagnostics: what woke the task and the controller state after handling
     // it. NO_OP threshold wakes are skipped since the task can wake many times
     // just before a threshold.
-    printf("NEXT ACTION DETECTED: %s\n", game_action_to_string(next_action));
+    if (next_action != NO_OP) {
+      printf("NEXT ACTION DETECTED: %s\n", game_action_to_string(next_action));
+    }
     if (queue_receive == pdPASS) {
       printf("\t%s %s @ %llums -> %s\n", button_event_buf.pin == UP_BUTTON_PIN ? "up" : "down",
              button_event_buf.is_pressed ? "press" : "release",
@@ -183,7 +185,6 @@ void button_controller_task(void *pvParameters) {
       printf("\tthreshold wake @ %llums -> %s\n", (unsigned long long)(input.event_time / 1000),
              controller_to_string(&controller));
     }
-    printf("\t\tsmallest amount of free stack remaining (in words): %lu\n", uxTaskGetStackHighWaterMark(NULL));
   }
 }
 
@@ -233,11 +234,6 @@ int main() {
                                      button_interrupt_cb);
 
   xTaskCreate(deferred_button_interrupt_handler, "DEFERRED_BUTTON_INTERRUPT_HANDLER", 256, NULL, 2, NULL);
-
-  while (!stdio_usb_connected()) {
-    sleep_ms(100);
-  }
-  printf("Hello from RainbowPico!\n");
 
   vTaskStartScheduler();
 }
