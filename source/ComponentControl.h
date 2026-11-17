@@ -8,7 +8,7 @@
 #include "Hardware.h"
 #include "pico/time.h"
 
-void set_led_rgb_hue(struct rgb_led led, struct rgb_color color);
+void set_led_rgb_hue(struct rgb_led *led, struct rgb_color *color);
 
 void turn_led_on(uint pin);
 

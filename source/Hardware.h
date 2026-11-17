@@ -5,12 +5,12 @@
  * +------+-----------------------+-------------+
  * | GPIO |    PIN description    | PWM channel |
  * +------+-----------------------+-------------+
- * |    6 | target rgb led blue   | 3A          |
- * |    7 | target rgb led green  | 3B          |
- * |    8 | target rgb led red    | 4A          |
- * |   19 | play rgb led blue     | 1B          |
- * |   20 | play rgb led green    | 2A          |
- * |   21 | play rgb led red      | 2B          |
+ * |    6 | play rgb led blue     | 3A          |
+ * |    7 | play rgb led green    | 3B          |
+ * |    8 | play rgb led red      | 4A          |
+ * |   19 | target rgb led blue   | 1B          |
+ * |   20 | target rgb led green  | 2A          |
+ * |   21 | target rgb led red    | 2B          |
  * +------+-----------------------+-------------+
  *
  */

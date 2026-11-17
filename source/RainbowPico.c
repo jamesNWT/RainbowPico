@@ -3,6 +3,7 @@
 #include "Controller.h"
 #include "Diagnostics.h"
 #include "FreeRTOS.h"
+#include "Game.h"
 #include "Hardware.h"
 #include "hardware/pwm.h"
 #include "pico/stdlib.h"
@@ -61,6 +62,23 @@ static TickType_t us_to_ticks(uint64_t us) {
     return portMAX_DELAY;
   }
   return pdMS_TO_TICKS((us / 1000) + 1);
+}
+
+void game_task(void *pvParameters) {
+  // initialize the RGB LEDs. They need to be owned by this task, which is why we initialize them here.
+  struct rgb_led target_rgb_led = build_rgb_led(TARGET_RGB_LED_R_PIN, TARGET_RGB_LED_G_PIN, TARGET_RGB_LED_B_PIN);
+  struct rgb_led play_rgb_led = build_rgb_led(PLAY_RGB_LED_R_PIN, PLAY_RGB_LED_G_PIN, PLAY_RGB_LED_B_PIN);
+
+  init_rgb_led(target_rgb_led);
+  init_rgb_led(play_rgb_led);
+
+  start_new_game(&target_rgb_led, &play_rgb_led);
+
+  game_action_kind next_action_buf;
+
+  while (1) {
+    // xQueueReceive(next_action_queue, &next_action_buf, portMAX_DELAY);
+  }
 }
 
 void button_controller_task(void *pvParameters) {
@@ -138,18 +156,15 @@ int main() {
   init_button_pin(UP_BUTTON_PIN);
   init_button_pin(DOWN_BUTTON_PIN);
 
-  struct rgb_led target_rgb_led = build_rgb_led(TARGET_RGB_LED_R_PIN, TARGET_RGB_LED_G_PIN, TARGET_RGB_LED_B_PIN);
-  struct rgb_led play_rgb_led = build_rgb_led(PLAY_RGB_LED_R_PIN, PLAY_RGB_LED_G_PIN, PLAY_RGB_LED_B_PIN);
-
-  init_rgb_led(target_rgb_led);
-  init_rgb_led(play_rgb_led);
-
   // Initialize state variables
 
   // Precomputations
   compute_gamma_table();
 
   // Task setup
+  next_action_queue = xQueueCreate(10, sizeof(game_action_kind));
+  xTaskCreate(game_task, "GAME_TASK", 256, NULL, 1, NULL);
+
   button_event_queue = xQueueCreate(10, sizeof(struct button_event));
   xTaskCreate(button_controller_task, "RESPOND_TO_BUTTON_TASK", 256, NULL, 1, NULL);
 
